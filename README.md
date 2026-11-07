@@ -3,6 +3,9 @@
 순수 웹 기술(Vanilla JavaScript + HTML5 Canvas/DOM + Web Audio API)로 구현한 **롤토체스 시즌 4: 운명** 미니 게임입니다.
 별도의 복잡한 게임 엔진이나 무거운 라이브러리 없이, 브라우저만 있으면 즉시 실행하여 플레이할 수 있습니다.
 
+### 🌐 온라인 바로 플레이하기
+👉 **[https://malaybearkiller.github.io/tft-fates/](https://malaybearkiller.github.io/tft-fates/)**
+
 ---
 
 ## 🌟 핵심 구현 시스템
