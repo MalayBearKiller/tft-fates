@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TFT 시즌 4: 운명 (Fates) - 미니 시뮬레이터</title>
+  <link rel="stylesheet" href="./style.css?v=3.0">
+</head>
+<body>
+
+  <!-- 롤토체스 운명(Fates): 영혼의 꽃 황혼의 성소 (Spirit Blossom Sanctuary) 배경 레이어 -->
+  <div id="scenic-mountain-bg" class="scenic-bg">
+    <!-- 성소 황혼 하늘 & 오로라 광채 -->
+    <div class="sanctuary-sky-glow"></div>
+    <div class="celestial-moon"></div>
+
+    <!-- 원경: 운해 너머 신비로운 영혼 산맥과 성소 누각 실루엣 (전체 화면 1440x900 풀스케일) -->
+    <svg class="mountain-silhouette mountain-far" viewBox="0 0 1440 900" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="farMountainGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#4c1d95" stop-opacity="0.55" />
+          <stop offset="45%" stop-color="#1e1b4b" stop-opacity="0.85" />
+          <stop offset="100%" stop-color="#070b16" stop-opacity="0.98" />
+        </linearGradient>
+        <linearGradient id="midMountainGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1e293b" stop-opacity="0.78" />
+          <stop offset="45%" stop-color="#0f172a" stop-opacity="0.95" />
+          <stop offset="100%" stop-color="#04070f" stop-opacity="1" />
+        </linearGradient>
+        <radialGradient id="blossomGlowLeft" cx="0.1" cy="0.15" r="0.35">
+          <stop offset="0%" stop-color="#f472b6" stop-opacity="0.28" />
+          <stop offset="50%" stop-color="#c084fc" stop-opacity="0.12" />
+          <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+        </radialGradient>
+        <radialGradient id="blossomGlowRight" cx="0.9" cy="0.18" r="0.35">
+          <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22" />
+          <stop offset="50%" stop-color="#f472b6" stop-opacity="0.12" />
+          <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+
+      <!-- 좌/우 상단 부드러운 영혼의 벚꽃 오로라 후광 (잘림 없는 방사형 그라데이션) -->
+      <rect x="0" y="0" width="1440" height="900" fill="url(#blossomGlowLeft)" />
+      <rect x="0" y="0" width="1440" height="900" fill="url(#blossomGlowRight)" />
+
+      <!-- 원경 산맥 (능선 봉우리: x=210, y=430 / x=1190, y=410) -->
+      <path d="M0,560 C110,490 160,430 210,430 C270,430 340,510 450,440 C560,370 660,480 780,430 C920,370 1090,410 1190,410 C1270,410 1360,460 1440,420 L1440,900 L0,900 Z" fill="url(#farMountainGrad)"></path>
+
+      <!-- 좌측 산봉우리(x=210, y=430) 위에 우뚝 솟은 동양풍 성소 누각(Pagoda) -->
+      <g transform="translate(0, 150)">
+        <path d="M175,285 L240,285 L232,270 L183,270 Z" fill="#161332" />
+        <path d="M162,272 C188,263 227,263 253,272 L236,258 L179,258 Z" fill="#1e1b4b" />
+        <rect x="190" y="242" width="35" height="16" fill="#121026" />
+        <!-- 누각 창문 따뜻한 등불 빛 -->
+        <rect x="198" y="246" width="6" height="8" rx="2" fill="#fbbf24" opacity="0.85" />
+        <rect x="210" y="246" width="6" height="8" rx="2" fill="#fbbf24" opacity="0.85" />
+        <path d="M155,244 C185,233 230,233 260,244 L240,228 L175,228 Z" fill="#1e1b4b" />
+        <rect x="196" y="213" width="23" height="15" fill="#121026" />
+        <rect x="204" y="216" width="7" height="8" rx="2" fill="#fde047" opacity="0.9" />
+        <path d="M168,215 C192,204 223,204 247,215 L207.5,193 Z" fill="#2e1065" />
+        <line x1="207.5" y1="176" x2="207.5" y2="194" stroke="#f472b6" stroke-width="2.5" stroke-opacity="0.7" />
+      </g>
+
+      <!-- 우측 산봉우리(x=1190, y=410) 위에 세워진 영혼의 도리이(Torii) 신사 관문 -->
+      <g transform="translate(0, 222)">
+        <path d="M1152,158 C1174,165 1206,165 1228,158 L1225,166 C1204,171 1176,171 1155,166 Z" fill="#1e1b4b" />
+        <rect x="1162" y="173" width="56" height="4.5" fill="#1e1b4b" />
+        <rect x="1170" y="164" width="5" height="36" fill="#121026" />
+        <rect x="1205" y="164" width="5" height="36" fill="#121026" />
+        <circle cx="1190" cy="182" r="3.5" fill="#38bdf8" opacity="0.85" />
+      </g>
+
+      <!-- 중경 산등성이와 계곡 -->
+      <path d="M0,640 C160,560 290,610 440,520 C580,440 720,540 880,470 C1040,400 1180,500 1320,440 C1380,415 1415,430 1440,420 L1440,900 L0,900 Z" fill="url(#midMountainGrad)"></path>
+    </svg>
+
+    <!-- 신비로운 산안개 & 운해 (Cloud Sea) -->
+    <div class="mist-cloud-layer cloud-1"></div>
+    <div class="mist-cloud-layer cloud-2"></div>
+
+    <!-- 흩날리는 영혼의 벚꽃잎 & 영혼 반딧불이 파티클 -->
+    <div class="spirit-particles" aria-hidden="true">
+      <span class="petal p1"></span>
+      <span class="petal p2"></span>
+      <span class="petal p3"></span>
+      <span class="petal p4"></span>
+      <span class="petal p5"></span>
+      <span class="petal p6"></span>
+      <span class="firefly f1"></span>
+      <span class="firefly f2"></span>
+      <span class="firefly f3"></span>
+      <span class="firefly f4"></span>
+    </div>
+  </div>
+
+  <!-- 상단 HUD: 롤토체스 공식 스타일 플로팅 스테이지 트래커 및 컨트롤 -->
+  <header class="hud-top floating-hud-top">
+    <!-- 중앙: STAGE 인디케이터 & 라운드 그래픽 타임라인 단일 일체형 통합 바 -->
+    <div id="stage-tracker-center" class="stage-tracker-center">
+      <div class="stage-main-title">
+        <span class="stage-tag">STAGE</span>
+        <span id="stage-number" class="stage-number">1-1</span>
+        <div class="stage-timeline-divider"></div>
+        <div id="stage-round-timeline" class="stage-round-timeline" aria-label="스테이지 진행 타임라인"></div>
+      </div>
+    </div>
+
+    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 초기화 (깔끔한 컴팩트 캡슐) -->
+    <div class="hud-section hud-right">
+      <div id="bgm-expandable-box" class="bgm-expandable-box" title="BGM 볼륨 설정 (클릭/호버 시 확장, 단축키: B)">
+        <button id="btn-bgm-mute" class="bgm-mute-btn" title="음소거 토글 [B]">🔊</button>
+        <div class="bgm-slider-drawer">
+          <input type="range" id="bgm-volume" class="bgm-volume-slider" min="0" max="1" step="0.01" value="0.35">
+          <span id="bgm-vol-text" class="bgm-vol-text">35%</span>
+        </div>
+      </div>
+      <button id="btn-reset-game" class="btn-action btn-reset" title="게임을 처음 상태(1-1)로 완전히 초기화">🔄 초기화</button>
+    </div>
+  </header>
+
+  <!-- 메인 게임 영역 (전체 화면이 거대한 아레나 보드) -->
+  <main class="main-arena full-arena">
+    <!-- 좌측 플로팅 시너지 엠블럼 레일 (TFT 원본 스타일: 원형 상징아이콘 + 하단 특성명 + 페이지 전환) -->
+    <aside id="synergy-list" class="synergy-orb-panel">
+      <div id="synergy-items-container" class="synergy-orb-list">
+        <!-- 원형 시너지 엠블럼 4개 동적 생성 -->
+      </div>
+      <div class="synergy-pager" title="마우스 휠 또는 버튼으로 특성 페이지를 넘깁니다">
+        <button id="btn-synergy-prev" class="synergy-page-btn" title="이전 특성 페이지 (단축키: [)">▲</button>
+        <span id="synergy-page-text" class="synergy-page-text">1 / 2</span>
+        <button id="btn-synergy-next" class="synergy-page-btn" title="다음 특성 페이지 (단축키: ])">▼</button>
+      </div>
+    </aside>
+
+    <!-- 중앙 거대 전장 보드 & 벤치 (체스판과 상하단 대기석이 일체형으로 결합된 아레나) -->
+    <section class="board-container full-board-container">
+      <!-- 화면 크기에 맞춰 보드 전체를 축소/확대하는 래퍼 -->
+      <div id="board-scaler" class="board-scaler">
+        <div class="tft-arena-board">
+          <!-- 좌측: 내 이자 골드 등불 제단 (10G ~ 50G, 최대 5개) -->
+          <div id="player-interest-pods" class="interest-pods-rail player-interest-rail" title="내 이자 골드 생성기 (10골드당 1개 점등, 최대 +5골드)">
+            <div class="interest-pod" data-pod="5"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="4"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="3"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="2"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="1"><span class="pod-gem"></span></div>
+          </div>
+
+          <!-- 우측: 상대 이자 골드 등불 제단 -->
+          <div id="enemy-interest-pods" class="interest-pods-rail enemy-interest-rail" title="상대 이자 골드 생성기">
+            <div class="interest-pod" data-pod="1"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="2"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="3"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="4"><span class="pod-gem"></span></div>
+            <div class="interest-pod" data-pod="5"><span class="pod-gem"></span></div>
+          </div>
+
+          <!-- 1. 상단: 상대 대기석 (9칸 성소 석조 제단 트레이) -->
+          <div class="bench-dock enemy-bench-dock">
+            <div id="enemy-bench-container" class="bench-slots">
+              <!-- 상대 대기석 9칸 동적 생성 -->
+            </div>
+          </div>
+
+          <!-- 2. 중앙: 성소 안뜰 전장 (평소엔 아름다운 성소 석조 바닥, 기물 배치 시에만 육각 전술 격자 점등) -->
+          <div class="board-grid-wrapper">
+            <!-- 성소 바닥 문양 & 중앙 영혼의 경계선 레이어 -->
+            <div class="sanctuary-floor-art" aria-hidden="true">
+              <!-- 상하단 진영 구분선 (영혼의 강 경계) -->
+              <div class="sanctuary-center-threshold">
+                <span class="threshold-ornament left">❖</span>
+                <div class="threshold-line"></div>
+                <span class="threshold-emblem">❀</span>
+                <div class="threshold-line"></div>
+                <span class="threshold-ornament right">❖</span>
+              </div>
+              <!-- 중앙 성소 마법진 문양 SVG -->
+              <svg class="sanctuary-medallion-svg" viewBox="0 0 260 260">
+                <circle cx="130" cy="130" r="112" fill="none" stroke="rgba(251, 191, 36, 0.14)" stroke-width="1.5" stroke-dasharray="6 4" />
+                <circle cx="130" cy="130" r="88" fill="none" stroke="rgba(56, 189, 248, 0.15)" stroke-width="1.2" />
+                <circle cx="130" cy="130" r="56" fill="none" stroke="rgba(244, 114, 182, 0.16)" stroke-width="1.5" />
+                <polygon points="130,24 162,98 236,130 162,162 130,236 98,162 24,130 98,98" fill="none" stroke="rgba(251, 191, 36, 0.11)" stroke-width="1.2" />
+              </svg>
+            </div>
+
+            <div id="board-grid" class="board-grid">
+              <!-- 벌집형 육각(Hexagon) 타일 동적 생성 -->
+            </div>
+          </div>
+
+          <!-- 3. 하단: 내 대기석 (9칸 성소 석조 제단 트레이) -->
+          <div class="bench-dock player-bench-dock">
+            <div id="bench-container" class="bench-slots">
+              <!-- 아군 대기석 9칸 동적 생성 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 우측 플로팅 8인 로비 순위표 (TFT 공식 스타일 원형 플로팅 아바타) -->
+    <aside id="scoreboard-panel" class="scoreboard-orb-panel">
+      <div id="scoreboard-list" class="scoreboard-orb-list">
+        <!-- 8인 플레이어 원형 플로팅 아바타 동적 생성 -->
+      </div>
+    </aside>
+  </main>
+
+  <!-- 하단 플로팅 상점 패널 (TFT 공식 레이아웃) -->
+  <footer class="hud-bottom floating-hud-bottom">
+    <!-- 좌측: 레벨, 배치 인원, 경험치 & TFT 액션 버튼 (경험치 구매 + 새로고침 + 잠금) -->
+    <div class="shop-controls level-control-card">
+      <!-- 상단 도킹: 전투 지휘 컨트롤 (레벨 카드 상단에 100% 밀착 정렬) -->
+      <div class="combat-command-dock">
+        <button id="btn-start-combat" class="btn-combat-start" title="전투를 시작합니다 [단축키: Space]">
+          <span class="combat-btn-icon">⚔️</span>
+          <span class="combat-btn-text">전투 시작</span>
+          <span class="combat-btn-key">Space</span>
+        </button>
+        <button id="btn-skip-combat" class="btn-combat-skip" title="전투 애니메이션 없이 결과를 즉시 계산하여 다음 라운드로 진행합니다">
+          <span class="combat-btn-icon">⏩</span>
+          <span class="combat-btn-text">스킵</span>
+        </button>
+      </div>
+
+      <div class="level-deploy-row">
+        <div class="level-chip">
+          <span class="chip-label">LEVEL</span>
+          <span id="level-number" class="chip-value">2</span>
+        </div>
+        <div id="deploy-chip" class="deploy-chip" title="현재 배치된 챔피언 / 최대 배치 인원">
+          <span class="chip-label">배치</span>
+          <span id="deploy-count" class="chip-value">0 / 2</span>
+        </div>
+      </div>
+
+      <div class="exp-track-row">
+        <div class="exp-bar-track">
+          <div id="exp-bar-fill" class="exp-bar-fill" style="width: 0%;"></div>
+        </div>
+        <div id="exp-text" class="exp-text">0 / 2 EXP</div>
+      </div>
+
+      <!-- TFT 액션 버튼 그룹 (F 경험치 구매 & D 새로고침 & 상점 잠금) -->
+      <div class="shop-action-group">
+        <!-- 1. 경험치 구매 버튼 -->
+        <button id="btn-buy-exp" class="tft-btn tft-btn-exp" title="4 골드를 소모하여 경험치 4를 구매합니다 [단축키: F]">
+          <div class="tft-btn-left">
+            <span class="tft-btn-title">경험치 구매</span>
+            <span class="tft-keycap">F</span>
+          </div>
+          <div class="tft-btn-right">
+            <span class="tft-exp-gain">+4 EXP</span>
+            <span class="tft-cost-tag exp-cost">4 🪙</span>
+          </div>
+        </button>
+
+        <!-- 2. 새로고침 (리롤) + 상점 잠금 버튼 행 -->
+        <div class="tft-reroll-lock-row">
+          <button id="btn-reroll" class="tft-btn tft-btn-reroll" title="2 골드를 소모하여 상점 챔피언을 새로고침합니다 [단축키: D]">
+            <div class="tft-btn-left">
+              <span class="tft-btn-title">새로고침</span>
+              <span class="tft-keycap">D</span>
+            </div>
+            <div class="tft-btn-right">
+              <span class="tft-cost-tag reroll-cost">2 🪙</span>
+            </div>
+          </button>
+          <button id="btn-lock" class="tft-btn-lock" title="상점을 잠급니다 (다음 라운드에 상점 카드가 유지됩니다)">🔓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 중앙 & 우측: 상단 (골드 캡슐 + 우측 정렬된 등장 확률) + 하단 5장 상점 카드 -->
+    <div class="shop-center-wrapper">
+      <div class="shop-header-row">
+        <!-- 골드 표시: 챔피언 등장 확률 줄의 좌측에 고급 골드 캡슐로 배치 -->
+        <div id="gold-display" class="tft-gold-capsule" title="현재 보유 골드">
+          <span class="gold-icon">🪙</span>
+          <span class="gold-amount">10</span>
+          <span class="gold-unit">G</span>
+        </div>
+
+        <!-- 챔피언 등장 확률: 우측으로 미룸 -->
+        <div class="shop-rates-bar-container">
+          <div class="shop-rates-title">
+            <span>🎲 등장 확률 <span class="rate-lvl-badge"><span id="rate-level-label">Lv. 2</span></span></span>
+          </div>
+          <div id="shop-rates-display" class="shop-rates-bar">
+            <!-- 코스트별 등장 확률 동적 갱신 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 5장의 챔피언 상점 카드 -->
+      <div id="shop-cards" class="shop-cards">
+        <!-- 동적 생성 -->
+      </div>
+    </div>
+  </footer>
+
+  <!-- 연출 오버레이 (갈리오 강림 등) -->
+  <div id="overlay-container"></div>
+
+  <!-- 결과 및 잭팟 모달 -->
+  <div id="modal-container"></div>
+
+  <!-- 단일 번들 스크립트 (file:// 환경 CORS 호환) -->
+  <script src="./app.js?v=3.0"></script>
+</body>
+</html>
