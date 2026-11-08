@@ -15,8 +15,10 @@ function makeUid(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-// 성급/선택받은 자 여부에 맞는 유닛 객체 생성
-function makeUnit(champ, star, side, { isChosen = false, chosenTrait = null, items = [] } = {}) {
+// 성급/선택받은 자 여부에 맞는 유닛 객체 생성 (옵션 객체 및 아이템 배열 모두 안전 지원)
+function makeUnit(champ, star, side, opts = {}) {
+  const options = Array.isArray(opts) ? { items: opts } : (opts || {});
+  const { isChosen = false, chosenTrait = null, items = [] } = options;
   const unit = {
     uid: makeUid(side === "player" ? "u" : "enemy"),
     champ,
@@ -1227,7 +1229,7 @@ class TFTGame {
           <div class="card-top">
             <div class="card-name-group">
               <span class="card-hotkey">${index + 1}</span>
-              ${star > 1 ? '<span class="card-star-tag">★★</span>' : ''}
+              <span class="card-name">${baseChamp.name} ${star > 1 ? '<span class="card-star-tag">★★</span>' : ''}</span>
             </div>
             <span class="card-cost">${cost} 🪙</span>
           </div>
@@ -2033,8 +2035,8 @@ class TFTGame {
       if (this.draggedItemInfo && unit.side === "player") {
         e.preventDefault();
         e.stopPropagation();
-        const { itemId, slotIdx } = this.draggedItemInfo;
-        this.equipItemToUnit(itemId, unit, slotIdx);
+        const { itemId, inventoryIndex } = this.draggedItemInfo;
+        this.equipItemToUnit(unit, itemId, inventoryIndex);
         this.draggedItemInfo = null;
       }
     });
@@ -3203,7 +3205,23 @@ class TFTGame {
     // 승패 체크 (소환수는 승패 유닛 수 카운트 제외, 윗몸일으키기 중인 세트도 살아있는 유닛으로 취급)
     const alivePlayers = battle.units.filter(u => u.side === "player" && u.hp > 0 && !u.isSummon);
     const aliveEnemies = battle.units.filter(u => u.side === "enemy" && u.hp > 0 && !u.isSummon);
-    if (aliveEnemies.length === 0) { this.endCombat(true); return; }
+    if (aliveEnemies.length === 0) {
+      // 크립 라운드에서는 마지막 미니언 사망 후 전리품 팝업 연출(약 650ms)을 안정적으로 즐길 수 있도록 부드러운 딜레이 적용
+      const round = this.getRoundInfo(this.roundIdx);
+      if (round && !round.isPvP && !battle.isHeadless) {
+        if (!battle.endCombatScheduled) {
+          battle.endCombatScheduled = true;
+          setTimeout(() => {
+            if (this.phase === "combat" && this.battle === battle) {
+              this.endCombat(true);
+            }
+          }, 650);
+        }
+        return;
+      }
+      this.endCombat(true);
+      return;
+    }
     if (alivePlayers.length === 0) {
       if (battle.playerStartedEmpty && now < 1200 && !battle.isHeadless) {
         // 오픈 포트(빈 필드) 시 1.2초 동안 상대 필드 모습을 보여준 뒤 패배 처리 (스킵 중에는 즉시 처리)
@@ -3741,7 +3759,7 @@ class TFTGame {
 
   // 미니언/크립 처치 시 아이템 전리품 드롭 애니메이션 (통통 튀는 바운스 후 인벤토리로 흡수)
   triggerMinionLootDrop(battle, unit, itemId) {
-    if (!itemId) return;
+    if (!itemId || !ITEMS[itemId]) return;
     const itemObj = ITEMS[itemId];
 
     // 스킵/headless 모드일 경우 즉시 인벤토리에 추가
@@ -3759,8 +3777,31 @@ class TFTGame {
       return;
     }
 
-    this.pendingLootItems = this.pendingLootItems || [];
-    this.pendingLootItems.push(itemId);
+    // 전리품 1회 확정 지급 콜백 (중복 지급 원천 차단)
+    let delivered = false;
+    const deliverLoot = () => {
+      if (delivered) return;
+      delivered = true;
+      if (this.pendingLootDrops) {
+        const idx = this.pendingLootDrops.indexOf(deliverLoot);
+        if (idx !== -1) this.pendingLootDrops.splice(idx, 1);
+      }
+      if (!this.player.itemInventory) this.player.itemInventory = [];
+      if (this.player.itemInventory.length < 10) {
+        this.player.itemInventory.push(itemId);
+        this.renderItemInventory();
+        sound.playCombine(2);
+
+        if (this.dom.itemInventoryPanel) {
+          this.dom.itemInventoryPanel.classList.add("inventory-receive-flash");
+          setTimeout(() => this.dom.itemInventoryPanel?.classList.remove("inventory-receive-flash"), 450);
+        }
+        this.showToastNotification(`🎁 미니언 전리품! [${itemObj.icon} ${itemObj.name}] 획득!`, "success");
+      }
+    };
+
+    if (!this.pendingLootDrops) this.pendingLootDrops = [];
+    this.pendingLootDrops.push(deliverLoot);
 
     // 전장 절대 화면 좌표 계산
     const boardRect = this.dom.boardGrid.getBoundingClientRect();
@@ -3779,21 +3820,20 @@ class TFTGame {
     // 튀어나오는 전리품 황금 구체
     const lootOrb = document.createElement("div");
     lootOrb.className = "minion-loot-drop-orb";
-    lootOrb.innerHTML = `<div class="loot-orb-box">${itemObj?.icon || "🎁"}</div>`;
+    lootOrb.innerHTML = `<div class="loot-orb-box">${itemObj.icon}</div>`;
     lootOrb.style.left = `${startX}px`;
     lootOrb.style.top = `${startY}px`;
     document.body.appendChild(lootOrb);
 
     sound.playCombine(1);
 
-    // 450ms 지면 통통 바운스 후 좌측 아이템 인벤토리로 부드럽게 흡수 비행
+    // 400ms 지면 통통 바운스 후 좌측 아이템 인벤토리로 부드럽게 흡수 비행
     setTimeout(() => {
-      if (!lootOrb.parentNode) return;
       const invRect = this.dom.itemInventoryPanel ? this.dom.itemInventoryPanel.getBoundingClientRect() : null;
       const targetX = invRect ? (invRect.left + invRect.width / 2) : 60;
       const targetY = invRect ? (invRect.top + 70) : 150;
 
-      lootOrb.style.transition = "all 0.55s cubic-bezier(0.22, 1, 0.36, 1)";
+      lootOrb.style.transition = "all 0.5s cubic-bezier(0.22, 1, 0.36, 1)";
       lootOrb.style.left = `${targetX}px`;
       lootOrb.style.top = `${targetY}px`;
       lootOrb.style.transform = "translate(-50%, -50%) scale(0.65)";
@@ -3801,23 +3841,9 @@ class TFTGame {
 
       setTimeout(() => {
         lootOrb.remove();
-        const pIdx = this.pendingLootItems.indexOf(itemId);
-        if (pIdx !== -1) this.pendingLootItems.splice(pIdx, 1);
-
-        if (!this.player.itemInventory) this.player.itemInventory = [];
-        if (this.player.itemInventory.length < 10) {
-          this.player.itemInventory.push(itemId);
-          this.renderItemInventory();
-          sound.playCombine(2);
-
-          if (this.dom.itemInventoryPanel) {
-            this.dom.itemInventoryPanel.classList.add("inventory-receive-flash");
-            setTimeout(() => this.dom.itemInventoryPanel.classList.remove("inventory-receive-flash"), 450);
-          }
-          this.showToastNotification(`🎁 미니언 전리품! [${itemObj?.icon || ''} ${itemObj?.name || itemId}] 획득!`, "success");
-        }
-      }, 550);
-    }, 450);
+        deliverLoot();
+      }, 500);
+    }, 400);
   }
 
   // 즈롯 차원문 공허 생명체 소환 (소환수는 승패 유닛 수 카운트 제외)
@@ -4151,12 +4177,10 @@ class TFTGame {
 
     // 미니언/크립 라운드 전리품 안전 수거 및 플러시 (승패 무관)
     if (!round.isPvP) {
-      if (this.pendingLootItems && this.pendingLootItems.length > 0) {
-        if (!this.player.itemInventory) this.player.itemInventory = [];
-        while (this.pendingLootItems.length > 0 && this.player.itemInventory.length < 10) {
-          this.player.itemInventory.push(this.pendingLootItems.shift());
-        }
-        this.pendingLootItems = [];
+      if (this.pendingLootDrops && this.pendingLootDrops.length > 0) {
+        const pending = [...this.pendingLootDrops];
+        this.pendingLootDrops = [];
+        pending.forEach(deliverFn => deliverFn());
       }
       if (battle && battle.units && playerWon) {
         battle.units.forEach(u => {
@@ -4170,7 +4194,6 @@ class TFTGame {
         });
       }
       this.renderItemInventory();
-      document.querySelectorAll(".minion-loot-drop-orb").forEach(el => el.remove());
     }
 
     // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
@@ -4457,7 +4480,7 @@ class TFTGame {
 
     // 모달창 닫기
     this.dom.modalContainer.innerHTML = "";
-    this.pendingLootItems = [];
+    this.pendingLootDrops = [];
     document.querySelectorAll(".minion-loot-drop-orb, .loot-drop-shockwave").forEach(el => el.remove());
 
     // 플레이어 기본 정보 리셋
