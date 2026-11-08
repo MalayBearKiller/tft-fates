@@ -173,6 +173,12 @@
             </div>
           </div>
 
+          <!-- 실시간 관전 및 정찰 안내 플로팅 배너 -->
+          <div id="scout-banner" class="scout-banner" style="display: none;">
+            <span id="scout-banner-text" class="scout-banner-text">👁️ 관전 중</span>
+            <button id="btn-return-home" class="btn-return-home" title="내 결투장으로 복귀 (단축키: Space 또는 1)">🏠 내 결투장 복귀 [Space]</button>
+          </div>
+
           <!-- 2. 중앙: 성소 안뜰 전장 (평소엔 아름다운 성소 석조 바닥, 기물 배치 시에만 육각 전술 격자 점등) -->
           <div class="board-grid-wrapper">
             <!-- 성소 바닥 문양 & 중앙 영혼의 경계선 레이어 -->
@@ -657,6 +663,90 @@
         assert(botsAt11.every(o => o.board.length === 1), 'All 7 AI bots have exactly 1 unit in 1-1');
         assert(botsAt11.every(o => o.board[0].star === 1), 'All AI bot units in 1-1 are 1-star (no 2-stars)');
         assert(botsAt11.every(o => (!o.bench || o.bench.length === 0)), 'All AI bot benches in 1-1 are empty');
+
+        // TEST 16: Real-time Multi-Battle Spectating across Lobby
+        game.resetGame();
+        assert(game.phase === 'planning', 'Game in planning');
+
+        // 16.1: PvE Multi-Battle Initialization in 1-1
+        game.startCombat();
+        assert(game.phase === 'combat', 'Phase is combat');
+        assert(Array.isArray(game.lobbyBattles), 'game.lobbyBattles is initialized');
+        assert(game.lobbyBattles.length === 8, 'All 8 players (1 user + 7 AI bots) have active PvE battles in 1-1: ' + game.lobbyBattles.length);
+        assert(game.battle === game.lobbyBattles[0], 'game.battle points to player battle');
+        assert(game.getCurrentlyViewedBattle() === game.battle, 'Initially viewing player battle');
+
+        // 16.2: Switch to Spectate AI Bot (Sett) during combat
+        game.scoutPlayer('opp_sett');
+        assert(game.scoutedPlayerId === 'opp_sett', 'Scouted player set to opp_sett during combat');
+        const viewedSett = game.getCurrentlyViewedBattle();
+        assert(viewedSett && viewedSett.homePlayerId === 'opp_sett', 'Currently viewed battle is Sett match');
+        assert(viewedSett.isPlayerMatch === false, 'Sett match is marked isPlayerMatch=false');
+        assert(game.dom.scoutBanner.style.display === 'flex', 'Scout banner visible while spectating');
+        assert(game.dom.scoutBannerText.innerHTML.includes('세트'), 'Scout banner displays Sett name');
+
+        const settOrb = game.dom.scoreboardList.querySelector('[data-player-id="opp_sett"]');
+        assert(settOrb && settOrb.classList.contains('spectating'), 'Scoreboard orb for Sett has .spectating class');
+        assert(!!settOrb.querySelector('.orb-spectate-tag'), 'Scoreboard orb contains spectator eye tag');
+
+        // 16.3: Cycle scouting with cycleScouting(1) during combat
+        game.cycleScouting(1);
+        assert(game.scoutedPlayerId !== 'opp_sett', 'cycleScouting moved to next player: ' + game.scoutedPlayerId);
+        assert(game.getCurrentlyViewedBattle().homePlayerId === game.scoutedPlayerId, 'Viewed battle updated after cycleScouting');
+
+        // 16.4: Return to home battle via scoutPlayer("player")
+        game.scoutPlayer('player');
+        assert(game.scoutedPlayerId === null, 'Returned home: scoutedPlayerId is null');
+        assert(game.getCurrentlyViewedBattle() === game.battle, 'Viewing player battle again');
+        assert(game.dom.scoutBanner.style.display === 'none', 'Scout banner hidden when at home');
+
+        // 16.5: Return to home battle via #btn-return-home click
+        game.scoutPlayer('opp_warwick');
+        assert(game.scoutedPlayerId === 'opp_warwick', 'Spectating Warwick');
+        assert(game.dom.scoutBanner.style.display === 'flex', 'Scout banner visible');
+        game.dom.btnReturnHome.click();
+        assert(game.scoutedPlayerId === null, 'Returned home via btnReturnHome click');
+        assert(game.dom.scoutBanner.style.display === 'none', 'Scout banner hidden again');
+
+        // 16.6: PvP 1v1 Multi-Battle Pairing in Stage 2-1
+        game.skipCombat(); // finish 1-1
+        game.skipCombat(); // finish 1-2
+        game.skipCombat(); // finish 1-3
+        game.skipCombat(); // finish 1-4
+        // Now roundIdx is 4 (Stage 2-1 PvP)
+        const round21 = game.getRoundInfo(game.roundIdx);
+        assert(round21 && round21.isPvP, 'Round 2-1 is PvP');
+        game.startCombat();
+        assert(game.phase === 'combat', 'Combat started in 2-1');
+        assert(game.lobbyBattles.length === 4, '4 concurrent 1v1 PvP matches formed in 8-player lobby: ' + game.lobbyBattles.length);
+
+        // Verify AI vs AI match structure
+        const aiMatch = game.lobbyBattles.find(b => !b.isPlayerMatch);
+        assert(!!aiMatch, 'Found AI vs AI match in lobby');
+        assert(aiMatch.homePlayerId !== 'player' && aiMatch.awayPlayerId !== 'player', 'AI match has two non-player combatants');
+        const homeUnits = aiMatch.units.filter(u => u.side === 'player');
+        const awayUnits = aiMatch.units.filter(u => u.side === 'enemy');
+        assert(homeUnits.length > 0, 'AI home side has deployed units: ' + homeUnits.length);
+        assert(awayUnits.length > 0, 'AI away side has deployed units: ' + awayUnits.length);
+        assert(homeUnits.every(u => u.r >= 3), 'Home units placed on player half (row 3~5)');
+        assert(awayUnits.every(u => u.r <= 2), 'Away units placed on enemy half (row 0~2)');
+
+        // Spectate AI match in real time
+        game.scoutPlayer(aiMatch.homePlayerId);
+        assert(game.getCurrentlyViewedBattle() === aiMatch, 'Spectating viewed AI vs AI match');
+
+        // Step a tick in the spectator match
+        game.stepBattleTick(aiMatch);
+        assert(aiMatch.currentTime > 0, 'Battle time advanced');
+
+        // Skip combat to finalize round 2-1 and assert clean cleanup
+        game.skipCombat();
+        assert(game.phase === 'planning', 'Clean transition to planning phase after skip');
+        assert(game.lobbyBattles.length === 0, 'All lobby battle instances cleaned up');
+        const remainingCombatLayers = document.querySelectorAll('.combat-layer');
+        assert(remainingCombatLayers.length === 0, 'All combat DOM layers removed from board');
+
+        game.resetGame();
 
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';
         document.title = 'ALL_TESTS_PASSED';

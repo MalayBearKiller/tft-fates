@@ -2213,6 +2213,20 @@ const CHAMPION_SPLASH_KEYS = {
   leesin: "LeeSin"
 };
 
+// 백그라운드 AI 전투용 무음 오디오 더미 객체 (에러 방지 및 사운드 오염 차단)
+const SILENT_AUDIO = {
+  playAttack: () => {},
+  playSkillSound: () => {},
+  playTone: () => {},
+  playCombine: () => {},
+  playBuy: () => {},
+  playSell: () => {},
+  playReroll: () => {},
+  playLevelUp: () => {},
+  playVictory: () => {},
+  playDefeat: () => {}
+};
+
 const OPPONENT_COMP_POOLS = {
   opp_sett: {
     name: "세트",
@@ -2351,6 +2365,7 @@ class TFTGame {
 
     // 전투 시뮬레이션 객체
     this.battle = null;
+    this.lobbyBattles = [];
     this.combatInterval = null;
     this.battleSeq = 0;
 
@@ -4060,8 +4075,9 @@ class TFTGame {
     const maxRow = side === "player" ? 6 : 3;
     for (let r = minRow; r < maxRow; r++) {
       for (let c = 0; c < 7; c++) {
-        if (this.board[r][c]) {
-          units.push({ ...this.board[r][c], r, c });
+        const u = this.board[r][c];
+        if (u && (!side || u.side === side)) {
+          units.push({ ...u, r, c });
         }
       }
     }
@@ -4857,10 +4873,19 @@ class TFTGame {
     }
   }
 
-  // 플레이어 또는 상대 결투장 정찰 전환 (불필요한 알림 팝업 완전 제거)
+  // 플레이어 또는 상대 결투장 정찰 / 실시간 관전 전환
   scoutPlayer(playerId) {
     if (this.phase === "combat") {
-      this.showToastNotification("⚔️ 전투 진행 중에는 정찰할 수 없습니다.", "warning");
+      // 전투 진행 중 실시간 관전 전환
+      if (playerId === "player" || playerId === this.scoutedPlayerId) {
+        this.scoutedPlayerId = null;
+      } else {
+        this.scoutedPlayerId = playerId;
+      }
+      sound.playTone(520, "triangle", 0.05, 0.08, false);
+      this.updateCombatSpectatorView();
+      this.updateScoreboardUI();
+      this.updateScoutBanner();
       return;
     }
 
@@ -4877,9 +4902,8 @@ class TFTGame {
     this.updateScoutBanner();
   }
 
-  // Tab 또는 Q 키로 8인 로비 순환 정찰
+  // Tab 또는 Q 키로 8인 로비 순환 정찰 / 실시간 관전
   cycleScouting(direction = 1) {
-    if (this.phase === "combat") return;
     const alive = this.lobbyOpponents.filter(p => p.isAlive);
     if (alive.length === 0) return;
     const currentId = this.scoutedPlayerId || "player";
@@ -4889,14 +4913,71 @@ class TFTGame {
     this.scoutPlayer(alive[nextIdx].id);
   }
 
-  // 정찰 안내 플로팅 배너 및 상/하단 대기석 라벨 갱신 (알림 배너 제거 & 스테이지 상시 노출)
+  // 현재 화면에 렌더링할 전투 인스턴스 반환 (관전 중인 상대의 전투 또는 내 전투)
+  getCurrentlyViewedBattle() {
+    if (this.phase !== "combat" || !this.lobbyBattles || this.lobbyBattles.length === 0) {
+      return this.battle;
+    }
+    const currentId = this.scoutedPlayerId || "player";
+    if (currentId === "player") {
+      return this.battle;
+    }
+    const match = this.lobbyBattles.find(b => b.homePlayerId === currentId || b.awayPlayerId === currentId);
+    return match || this.battle;
+  }
+
+  // 전투 중 카메라/관전 레이어 갱신 (선택한 플레이어 결투장으로 전환)
+  updateCombatSpectatorView() {
+    if (this.phase !== "combat" || !this.lobbyBattles) return;
+    const viewed = this.getCurrentlyViewedBattle();
+
+    this.lobbyBattles.forEach(b => {
+      const isViewed = (b === viewed);
+      if (b.layer) {
+        b.layer.style.display = isViewed ? "block" : "none";
+      }
+      b.audio = isViewed ? sound : SILENT_AUDIO;
+    });
+
+    if (viewed) {
+      this.renderCombatState(viewed);
+    }
+  }
+
+  // 정찰 안내 플로팅 배너 및 상/하단 대기석 라벨 갱신
   updateScoutBanner() {
     if (this.dom.stageTrackerCenter) {
       this.dom.stageTrackerCenter.style.display = "flex";
     }
+
+    if (!this.dom.scoutBanner) return;
+
+    const isScouting = (this.scoutedPlayerId && this.scoutedPlayerId !== "player");
+    if (!isScouting) {
+      this.dom.scoutBanner.style.display = "none";
+      return;
+    }
+
+    this.dom.scoutBanner.style.display = "flex";
+    if (this.phase === "combat") {
+      const viewedBattle = this.getCurrentlyViewedBattle();
+      if (viewedBattle) {
+        if (viewedBattle.isPvE) {
+          this.dom.scoutBannerText.innerHTML = `⚔️ 실시간 관전: <strong>${viewedBattle.homeName}</strong> vs 👾 <strong>미니언 크립</strong>`;
+        } else {
+          this.dom.scoutBannerText.innerHTML = `⚔️ 실시간 관전: <strong>${viewedBattle.homeName}</strong> vs <strong>${viewedBattle.awayName}</strong>`;
+        }
+      } else {
+        const opp = this.lobbyOpponents.find(o => o.id === this.scoutedPlayerId);
+        this.dom.scoutBannerText.innerHTML = `⚔️ 실시간 관전: <strong>${opp ? opp.name : '상대'}</strong>`;
+      }
+    } else {
+      const opp = this.lobbyOpponents.find(o => o.id === this.scoutedPlayerId);
+      this.dom.scoutBannerText.innerHTML = `👁️ <strong>${opp ? opp.name : '상대'}</strong> 결투장 정찰 중`;
+    }
   }
 
-  // 8인 로비 순위표 UI 갱신 (체력순 정렬, 탈락자 및 등수 표시)
+  // 8인 로비 순위표 UI 갱신 (체력순 정렬, 탈락자 및 등수 표시, 관전 중 활성 강조)
   updateScoreboardUI() {
     if (!this.dom.scoreboardList) return;
 
@@ -4919,12 +5000,13 @@ class TFTGame {
     });
 
     this.dom.scoreboardList.innerHTML = "";
-    sorted.forEach((p, idx) => {
+    sorted.forEach((p) => {
       const isCurrent = (!this.scoutedPlayerId && p.id === "player") || (this.scoutedPlayerId === p.id);
+      const isSpectatingThis = (this.phase === "combat" && this.scoutedPlayerId === p.id);
       const item = document.createElement("div");
-      item.className = `scoreboard-orb-item ${isCurrent ? 'active' : ''} ${!p.isAlive ? 'eliminated' : ''}`;
+      item.className = `scoreboard-orb-item ${isCurrent ? 'active' : ''} ${isSpectatingThis ? 'spectating' : ''} ${!p.isAlive ? 'eliminated' : ''}`;
       item.dataset.playerId = p.id;
-      item.title = `${p.name} (Lv.${p.level || 1}) · 체력: ${p.hp} HP ${p.placement ? `[최종 ${p.placement}등]` : ''} - 클릭하여 결투장 정찰`;
+      item.title = `${p.name} (Lv.${p.level || 1}) · 체력: ${p.hp} HP ${p.placement ? `[최종 ${p.placement}등]` : ''} - ${this.phase === "combat" ? "클릭하여 실시간 전투 관전" : "클릭하여 결투장 정찰"}`;
 
       const hpStatusClass = p.hp <= 25 ? 'critical' : (p.hp <= 50 ? 'warning' : 'healthy');
       const badgeText = p.isAlive ? p.hp : (p.placement ? `${p.placement}등` : '탈락');
@@ -4936,6 +5018,7 @@ class TFTGame {
         <div class="orb-avatar-box">
           <img class="orb-avatar-img" src="${p.avatar}" alt="${p.name}" onerror="this.src='https://ddragon.leagueoflegends.com/cdn/13.24.1/img/profileicon/588.png'">
           ${p.isPlayer ? '<span class="orb-me-tag">나</span>' : ''}
+          ${isSpectatingThis ? '<span class="orb-spectate-tag">👁️</span>' : ''}
           ${!p.isAlive ? '<span class="orb-dead-tag">💀</span>' : ''}
           ${p.winStreak >= 2 ? `<span class="orb-streak-tag">🔥${p.winStreak}</span>` : ''}
           ${p.lossStreak >= 2 ? `<span class="orb-streak-tag loss">💧${p.lossStreak}</span>` : ''}
@@ -4951,7 +5034,7 @@ class TFTGame {
   }
 
   // 라운드 종료 시 로비 AI 플레이어들 간의 전투 피해 시뮬레이션 및 탈락 순위 결정
-  simulateLobbyDamage(currentPvPOpp = null, playerWon = false, pvpDamage = 0, stageNum = null) {
+  simulateLobbyDamage(currentPvPOpp = null, playerWon = false, pvpDamage = 0, stageNum = null, battleSummaries = null) {
     if (stageNum === null) {
       const stageStr = String(this.getRoundInfo(this.roundIdx)?.stage || "1").split("-")[0];
       stageNum = parseInt(stageStr, 10) || 1;
@@ -4971,39 +5054,82 @@ class TFTGame {
       }
     }
 
-    // 2. 나머지 생존 AI들 페어링 대결 시뮬레이션
-    const otherAliveBots = this.lobbyOpponents.filter(p => !p.isPlayer && p.isAlive && (!currentPvPOpp || p.id !== currentPvPOpp.id));
-    // 셔플
-    for (let i = otherAliveBots.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [otherAliveBots[i], otherAliveBots[j]] = [otherAliveBots[j], otherAliveBots[i]];
-    }
+    // 2. 나머지 생존 AI들 대결 피해 적용 (실제 시뮬레이션 결과 우선 반영)
+    if (battleSummaries && battleSummaries.length > 0) {
+      battleSummaries.forEach(s => {
+        if (s.isPlayerMatch) return; // 이미 1번에서 처리됨
+        const homeBot = this.lobbyOpponents.find(o => o.id === s.homePlayerId);
+        const awayBot = this.lobbyOpponents.find(o => o.id === s.awayPlayerId);
 
-    for (let i = 0; i < otherAliveBots.length; i += 2) {
-      const botA = otherAliveBots[i];
-      const botB = otherAliveBots[i + 1]; // 홀수일 경우 botB는 undefined (유령 상대)
-      if (botB) {
-        // 전력(레벨 및 덱 기물 수) 기반 승패 확률
-        const powerA = (botA.level || 5) * 10 + (botA.board ? botA.board.length * 5 : 0) + Math.random() * 20;
-        const powerB = (botB.level || 5) * 10 + (botB.board ? botB.board.length * 5 : 0) + Math.random() * 20;
-        const loser = (powerA >= powerB) ? botB : botA;
-        const winner = (powerA >= powerB) ? botA : botB;
-        const dmg = (stageNum * 4) + Math.floor(Math.random() * 6);
-        loser.hp = Math.max(0, loser.hp - dmg);
-        loser.lossStreak++;
-        loser.winStreak = 0;
-        winner.winStreak++;
-        winner.lossStreak = 0;
-      } else {
-        // 유령 상대 대결: 60% 확률로 승리
-        if (Math.random() < 0.4) {
-          const dmg = (stageNum * 3) + Math.floor(Math.random() * 5);
-          botA.hp = Math.max(0, botA.hp - dmg);
-          botA.lossStreak++;
-          botA.winStreak = 0;
+        if (s.isPvE) {
+          // 크립 라운드
+          if (s.winner === "enemy" && homeBot && homeBot.isAlive) {
+            const dmg = (stageNum * 2) + Math.max(1, s.survivors) * 2;
+            homeBot.hp = Math.max(0, homeBot.hp - dmg);
+            homeBot.lossStreak++;
+            homeBot.winStreak = 0;
+          }
         } else {
-          botA.winStreak++;
-          botA.lossStreak = 0;
+          // PvP 라운드
+          if (s.winner === "player") {
+            // Home 승리
+            if (awayBot && awayBot.isAlive && !s.isGhostMatch) {
+              const dmg = (stageNum * 3) + Math.max(1, s.survivors) * 2;
+              awayBot.hp = Math.max(0, awayBot.hp - dmg);
+              awayBot.lossStreak++;
+              awayBot.winStreak = 0;
+            }
+            if (homeBot && homeBot.isAlive) {
+              homeBot.winStreak++;
+              homeBot.lossStreak = 0;
+            }
+          } else if (s.winner === "enemy") {
+            // Away 승리
+            if (homeBot && homeBot.isAlive) {
+              const dmg = (stageNum * 3) + Math.max(1, s.survivors) * 2;
+              homeBot.hp = Math.max(0, homeBot.hp - dmg);
+              homeBot.lossStreak++;
+              homeBot.winStreak = 0;
+            }
+            if (awayBot && awayBot.isAlive && !s.isGhostMatch) {
+              awayBot.winStreak++;
+              awayBot.lossStreak = 0;
+            }
+          }
+        }
+      });
+    } else {
+      // AI 페어링 대결 시뮬레이션 fallback (테스트 직접 호출 시 호환성 유지)
+      const otherAliveBots = this.lobbyOpponents.filter(p => !p.isPlayer && p.isAlive && (!currentPvPOpp || p.id !== currentPvPOpp.id));
+      for (let i = otherAliveBots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [otherAliveBots[i], otherAliveBots[j]] = [otherAliveBots[j], otherAliveBots[i]];
+      }
+
+      for (let i = 0; i < otherAliveBots.length; i += 2) {
+        const botA = otherAliveBots[i];
+        const botB = otherAliveBots[i + 1];
+        if (botB) {
+          const powerA = (botA.level || 5) * 10 + (botA.board ? botA.board.length * 5 : 0) + Math.random() * 20;
+          const powerB = (botB.level || 5) * 10 + (botB.board ? botB.board.length * 5 : 0) + Math.random() * 20;
+          const loser = (powerA >= powerB) ? botB : botA;
+          const winner = (powerA >= powerB) ? botA : botB;
+          const dmg = (stageNum * 4) + Math.floor(Math.random() * 6);
+          loser.hp = Math.max(0, loser.hp - dmg);
+          loser.lossStreak++;
+          loser.winStreak = 0;
+          winner.winStreak++;
+          winner.lossStreak = 0;
+        } else {
+          if (Math.random() < 0.4) {
+            const dmg = (stageNum * 3) + Math.floor(Math.random() * 5);
+            botA.hp = Math.max(0, botA.hp - dmg);
+            botA.lossStreak++;
+            botA.winStreak = 0;
+          } else {
+            botA.winStreak++;
+            botA.lossStreak = 0;
+          }
         }
       }
     }
@@ -5045,7 +5171,9 @@ class TFTGame {
         const base = CHAMPIONS.find(c => c.id === e.champId);
         if (!base) return;
         const unit = makeUnit(base, e.star || 1, "enemy", e.items || []);
-        this.board[e.row][e.col] = unit;
+        const r = (e.row >= 3) ? (5 - e.row) : e.row;
+        const c = (e.row >= 3) ? (6 - e.col) : e.col;
+        this.board[r][c] = unit;
       });
     } else {
       // 크립/몬스터 라운드
@@ -5324,46 +5452,138 @@ class TFTGame {
     };
   }
 
-  initBattleInstance() {
+  // 개별 전투 인스턴스 생성 (플레이어 매치 및 AI 봇 간의 실시간 매치 공용)
+  createBattleInstance(homePlayerId, awayPlayerId, homeUnitsData, awayUnitsData, isPlayerMatch = false, roundInfo = null) {
     const geo = this.measureBoardGeometry();
     const units = [];
-    for (let r = 0; r < 6; r++) {
-      for (let c = 0; c < 7; c++) {
-        const u = this.board[r][c];
-        if (u) units.push(this.createBattleUnit(u, r, c, geo));
+
+    if (isPlayerMatch) {
+      // 플레이어 매치: 현재 보드 격자(this.board)에 배치된 기물 그대로 사용
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 7; c++) {
+          const u = this.board[r][c];
+          if (u) units.push(this.createBattleUnit(u, r, c, geo));
+        }
       }
+      // 미니언/크립 라운드일 경우, 플레이어 매치의 적 유닛에 랜덤 아이템 전리품 드롭 배정
+      if (roundInfo && !roundInfo.isPvP) {
+        const stageNum = parseInt(String(roundInfo.stage || "1").split("-")[0], 10) || 1;
+        const dropCount = (stageNum === 1) ? 1 : (stageNum >= 4 ? 3 : 2);
+        const enemyUnits = units.filter(u => u.side === "enemy");
+        const shuffled = [...enemyUnits].sort(() => Math.random() - 0.5);
+        for (let i = 0; i < Math.min(dropCount, shuffled.length); i++) {
+          const randomBaseId = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
+          shuffled[i].lootDropItemId = randomBaseId;
+        }
+      }
+    } else {
+      // AI 봇 간 매치 또는 AI의 PvE 크립 매치
+      const isPvE = roundInfo && !roundInfo.isPvP;
+
+      // 1. Home 팀 기물 (하단 3~5행 배치, side = "player")
+      (homeUnitsData || []).forEach(item => {
+        let r = item.row !== undefined ? item.row : 5;
+        let c = item.col !== undefined ? item.col : 3;
+        let unitObj = null;
+        if (item.champ) {
+          unitObj = { ...item, side: "player" };
+        } else {
+          const base = CHAMPIONS.find(ch => ch.id === item.champId);
+          if (base) {
+            unitObj = makeUnit(base, item.star || 1, "player", item.items || []);
+          }
+        }
+        if (unitObj) {
+          units.push(this.createBattleUnit(unitObj, r, c, geo));
+        }
+      });
+
+      // 2. Away 팀 기물 (상단 0~2행 배치, side = "enemy")
+      (awayUnitsData || []).forEach(item => {
+        let r, c;
+        let unitObj = null;
+
+        if (isPvE) {
+          // 몬스터 크립
+          const champ = {
+            id: 'monster_' + item.name,
+            name: item.name,
+            cost: 1,
+            traits: [],
+            icon: item.icon,
+            image: item.image,
+            color: '#475569',
+            hp: item.hp,
+            ad: item.ad,
+            as: item.as,
+            armor: item.armor || 20,
+            mr: 10,
+            range: item.range || 1,
+            startMana: 0,
+            maxMana: 100,
+            skillName: "돌진 공격",
+            skillDesc: "적에게 강한 일격을 가합니다.",
+            skill: (caster, target, bt) => {
+              bt.dealDamage(caster, target, caster.ad * 1.5, "physical");
+            }
+          };
+          unitObj = makeUnit(champ, 1, "enemy", item.items || []);
+          unitObj.uid = makeUid('monster_bot');
+          r = item.row !== undefined ? item.row : 1;
+          c = item.col !== undefined ? item.col : 3;
+        } else {
+          // PvP 상대 AI 기물: 상단 진영을 바라보도록 180도 대칭 변환 (행: 5-row, 열: 6-col)
+          const origRow = item.row !== undefined ? item.row : 5;
+          const origCol = item.col !== undefined ? item.col : 3;
+          r = (origRow >= 3) ? (5 - origRow) : origRow;
+          c = 6 - origCol;
+
+          if (item.champ) {
+            unitObj = { ...item, side: "enemy" };
+          } else {
+            const base = CHAMPIONS.find(ch => ch.id === item.champId);
+            if (base) {
+              unitObj = makeUnit(base, item.star || 1, "enemy", item.items || []);
+            }
+          }
+        }
+
+        if (unitObj) {
+          units.push(this.createBattleUnit(unitObj, r, c, geo));
+        }
+      });
     }
 
-    // 미니언/크립 라운드일 경우, 적 유닛에 랜덤 아이템 드롭 배정 (처치 시 드롭 모션 발동)
-    const round = this.getRoundInfo(this.roundIdx);
-    if (round && !round.isPvP) {
-      const stageNum = parseInt(String(round.stage || "1").split("-")[0], 10) || 1;
-      const dropCount = (stageNum === 1) ? 1 : (stageNum >= 4 ? 3 : 2);
-      const enemyUnits = units.filter(u => u.side === "enemy");
-      const shuffled = [...enemyUnits].sort(() => Math.random() - 0.5);
-      for (let i = 0; i < Math.min(dropCount, shuffled.length); i++) {
-        const randomBaseId = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
-        shuffled[i].lootDropItemId = randomBaseId;
-      }
-    }
+    const homeEntry = this.lobbyOpponents ? this.lobbyOpponents.find(o => o.id === homePlayerId) : null;
+    const awayEntry = this.lobbyOpponents ? this.lobbyOpponents.find(o => o.id === awayPlayerId) : null;
+    const isPvE = roundInfo && !roundInfo.isPvP;
 
     const battle = {
       id: ++this.battleSeq,
-      currentTime: 0, // 시뮬레이션 시간(ms) - 탭이 백그라운드여도 일관되게 동작
+      currentTime: 0,
       units,
       geo,
       events: [],
       sides: {},
-      audio: sound,
+      homePlayerId,
+      awayPlayerId,
+      homeName: homeEntry ? homeEntry.name : (homePlayerId === "player" ? "나" : homePlayerId),
+      awayName: awayEntry ? awayEntry.name : (isPvE ? "미니언" : awayPlayerId),
+      isPlayerMatch,
+      isPvE,
+      finished: false,
+      winner: null,
+      survivors: 0,
+      damageDealt: 0,
+      audio: isPlayerMatch ? sound : SILENT_AUDIO,
       lastAttackSoundAt: -999,
       playerStartedEmpty: (units.filter(u => u.side === "player").length === 0)
     };
 
-    // 스킬(data.js)에서 사용하는 전투 API
+    // 스킬 API 바인딩
     Object.assign(battle, {
       dealDamage: (attacker, defender, amount, type = "physical") => this.dealDamage(battle, attacker, defender, amount, type),
-      spawnEffect: (x, y, emoji, duration = 600) => this.spawnBurstEffect(x, y, emoji, duration),
-      // origin 주변 rangeCells(타일 수) 안의 적 (forSide 기준의 적). 가까운 순.
+      spawnEffect: (x, y, emoji, duration = 600) => this.spawnBurstEffect(x, y, emoji, duration, battle),
       getEnemiesInRange: (origin, rangeCells, maxCount = 99, forSide = origin.side) => {
         const maxDist = rangeCells * geo.spacing + 1;
         return this.targetableUnits(battle, u => u.side !== forSide)
@@ -5383,15 +5603,13 @@ class TFTGame {
       instantEliminate: (target, reason = "즉사!") => {
         if (target.hp <= 0) return;
         target.hp = 0;
-        this.spawnDamagePopup(target.x, target.y, reason, "true");
+        this.spawnDamagePopup(target.x, target.y, reason, "true", battle);
       },
-      // 전장 가장자리 판정 (리 신 장외 홈런)
       isNearEdge: (target) => {
         const b = geo.bounds;
         const m = geo.spacing * 0.55;
         return target.x <= b.minX + m || target.x >= b.maxX - m || target.y <= b.minY + m || target.y >= b.maxY - m;
       },
-      // from 반대 방향으로 cells 타일만큼 밀어냄. 장외로 나가면 true 반환
       knockback: (target, from, cells = 2) => {
         const angle = Math.atan2(target.y - from.y, target.x - from.x);
         const nx = target.x + Math.cos(angle) * geo.spacing * cells;
@@ -5407,14 +5625,14 @@ class TFTGame {
       schedule: (delayMs, fn) => battle.events.push({ at: battle.currentTime + delayMs, fn })
     });
 
-    // 양 진영 시너지 계산 & 전투 시작 효과 적용 (적에게도 동일하게 적용)
+    // 양 진영 시너지 계산 & 전투 시작 효과 적용
     ["player", "enemy"].forEach(side => {
       const sideUnits = units.filter(u => u.side === side);
       const counts = countTraits(sideUnits);
       const cultistTier = traitTier(counts, "cultist");
       battle.sides[side] = {
         counts,
-        galioTier: cultistTier + 1, // 0 = 없음, 1 = 폭군, 2 = 마왕
+        galioTier: cultistTier + 1,
         galioSpawned: false,
         duelistPct: [0.15, 0.25, 0.40][traitTier(counts, "duelist")] || 0,
         divineMs: [4000, 7000, 10000][traitTier(counts, "divine")] || 0,
@@ -5424,12 +5642,59 @@ class TFTGame {
       battle.sides[side].startHp = sideUnits.reduce((sum, u) => sum + u.maxHp, 0);
     });
 
-    // 시작 아이템 효과 적용 (지크, 성배, 솔라리, 서풍, 장막, 수은, 덫발톱)
     this.applyStartItems(battle);
+    return battle;
+  }
 
-    this.battle = battle;
+  // 8인 로비 전체 동시 전투 인스턴스 초기화
+  initBattleInstance() {
+    this.lobbyBattles = [];
+    const currentRound = this.getRoundInfo(this.roundIdx);
+    const currentPvPOpp = this.getCurrentRoundOpponent();
+
+    // 1. 플레이어 메인 전투 인스턴스 생성
+    const playerAwayId = currentRound.isPvP ? (currentPvPOpp ? currentPvPOpp.id : "opponent") : "creeps";
+    const playerAwayUnits = currentRound.isPvP ? (currentPvPOpp ? currentPvPOpp.board : currentRound.enemies) : currentRound.enemies;
+    this.battle = this.createBattleInstance("player", playerAwayId, null, playerAwayUnits, true, currentRound);
+    this.lobbyBattles.push(this.battle);
+
+    // 2. 다른 생존 AI 봇들의 동시 전투 인스턴스 생성
+    if (!currentRound.isPvP) {
+      // PvE 라운드: 모든 생존 AI 봇들도 각자의 결투장에서 크립 미니언과 전투!
+      const aliveBots = this.lobbyOpponents.filter(p => !p.isPlayer && p.isAlive);
+      aliveBots.forEach(bot => {
+        const botBattle = this.createBattleInstance(bot.id, "creeps", bot.board, currentRound.enemies, false, currentRound);
+        this.lobbyBattles.push(botBattle);
+      });
+    } else {
+      // PvP 라운드: 나와 매칭된 상대 제외 나머지 생존 AI들 1v1 페어링 매치 생성
+      const otherAliveBots = this.lobbyOpponents.filter(p => !p.isPlayer && p.isAlive && (!currentPvPOpp || p.id !== currentPvPOpp.id));
+      // 셔플
+      const shuffledBots = [...otherAliveBots];
+      for (let i = shuffledBots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledBots[i], shuffledBots[j]] = [shuffledBots[j], shuffledBots[i]];
+      }
+
+      for (let i = 0; i < shuffledBots.length; i += 2) {
+        const botA = shuffledBots[i];
+        const botB = shuffledBots[i + 1];
+        if (botB) {
+          const aiBattle = this.createBattleInstance(botA.id, botB.id, botA.board, botB.board, false, currentRound);
+          this.lobbyBattles.push(aiBattle);
+        } else {
+          // 홀수일 경우 유령(Ghost) 상대 복제 매칭
+          const ghostTarget = otherAliveBots[0] || currentPvPOpp;
+          const ghostUnits = ghostTarget && ghostTarget.board ? ghostTarget.board : [];
+          const aiBattle = this.createBattleInstance(botA.id, `ghost_${ghostTarget ? ghostTarget.id : 'bot'}`, botA.board, ghostUnits, false, currentRound);
+          aiBattle.isGhostMatch = true;
+          this.lobbyBattles.push(aiBattle);
+        }
+      }
+    }
+
     this.dom.boardGrid.classList.add("in-combat");
-    this.renderCombatState();
+    this.updateCombatSpectatorView();
     this.combatInterval = setInterval(() => this.combatTick(), TICK_MS);
   }
 
@@ -5552,9 +5817,9 @@ class TFTGame {
     return best;
   }
 
-  combatTick() {
-    const battle = this.battle;
-    if (this.phase !== "combat" || !battle) return;
+  // 단일 전투 인스턴스 1틱 시뮬레이션
+  stepBattleTick(battle) {
+    if (!battle || battle.finished) return;
 
     battle.currentTime += TICK_MS;
     const now = battle.currentTime;
@@ -5568,41 +5833,34 @@ class TFTGame {
     battle.units.forEach(u => {
       if (u.isBanished && u.banishedUntil <= now) {
         u.isBanished = false;
-        this.spawnDamagePopup(u.x, u.y - 20, "추방 해제!", "heal");
+        this.spawnDamagePopup(u.x, u.y - 20, "추방 해제!", "heal", battle);
       }
     });
 
     // 승패 체크 (소환수는 승패 유닛 수 카운트 제외, 윗몸일으키기 중인 세트도 살아있는 유닛으로 취급)
     const alivePlayers = battle.units.filter(u => u.side === "player" && u.hp > 0 && !u.isSummon);
     const aliveEnemies = battle.units.filter(u => u.side === "enemy" && u.hp > 0 && !u.isSummon);
+
     if (aliveEnemies.length === 0) {
-      // 크립 라운드에서는 마지막 미니언 사망 후 전리품 팝업 연출(약 650ms)을 안정적으로 즐길 수 있도록 부드러운 딜레이 적용
-      const round = this.getRoundInfo(this.roundIdx);
-      if (round && !round.isPvP && !battle.isHeadless) {
-        if (!battle.endCombatScheduled) {
-          battle.endCombatScheduled = true;
-          setTimeout(() => {
-            if (this.phase === "combat" && this.battle === battle) {
-              this.endCombat(true);
-            }
-          }, 650);
-        }
-        return;
-      }
-      this.endCombat(true);
+      battle.finished = true;
+      battle.winner = "player";
+      battle.survivors = alivePlayers.length;
       return;
     }
     if (alivePlayers.length === 0) {
-      if (battle.playerStartedEmpty && now < 1200 && !battle.isHeadless) {
-        // 오픈 포트(빈 필드) 시 1.2초 동안 상대 필드 모습을 보여준 뒤 패배 처리 (스킵 중에는 즉시 처리)
+      if (battle.isPlayerMatch && battle.playerStartedEmpty && now < 1200 && !battle.isHeadless) {
+        // 오픈 포트(빈 필드) 시 1.2초 동안 상대 필드 모습을 보여준 뒤 패배 처리
       } else {
-        this.endCombat(false);
+        battle.finished = true;
+        battle.winner = "enemy";
+        battle.survivors = aliveEnemies.length;
         return;
       }
     }
     if (now >= COMBAT_TIME_LIMIT_MS) {
-      this.showToastNotification("⏱️ 전투 시간 초과! 무승부는 패배로 처리됩니다.");
-      this.endCombat(false);
+      battle.finished = true;
+      battle.winner = "draw";
+      battle.survivors = 0;
       return;
     }
 
@@ -5623,7 +5881,7 @@ class TFTGame {
           if (enemies.length > 0) {
             const burned = enemies[Math.floor(Math.random() * enemies.length)];
             battle.dealDamage(unit, burned, burned.maxHp * 0.05, "true");
-            this.spawnBurstEffect(burned.x, burned.y, "🔥", 600);
+            this.spawnBurstEffect(burned.x, burned.y, "🔥", 600, battle);
           }
         }
       }
@@ -5654,8 +5912,75 @@ class TFTGame {
     });
 
     this.separateUnits(battle);
-    if (!battle.isHeadless) {
-      this.renderCombatState();
+  }
+
+  // 100ms 전투 틱: 8인 로비 내 모든 전투 동시 진행 및 현재 보고 있는 결투장 렌더링
+  combatTick() {
+    if (this.phase !== "combat" || !this.battle) return;
+
+    // 1. 모든 전투 인스턴스 1틱 전진
+    if (this.lobbyBattles && this.lobbyBattles.length > 0) {
+      this.lobbyBattles.forEach(b => {
+        if (!b.finished) this.stepBattleTick(b);
+      });
+    } else {
+      if (!this.battle.finished) this.stepBattleTick(this.battle);
+    }
+
+    // 2. 현재 관전/시청 중인 결투장 렌더링
+    const viewedBattle = this.getCurrentlyViewedBattle();
+    if (viewedBattle && !viewedBattle.isHeadless) {
+      this.renderCombatState(viewedBattle);
+    }
+
+    // 3. 전투 종료 및 라운드 결산 판정
+    if (this.battle && this.battle.finished) {
+      const isPlayerWon = (this.battle.winner === "player");
+
+      // 내 결투장을 보고 있는 경우
+      if (!this.scoutedPlayerId || this.scoutedPlayerId === "player") {
+        const round = this.getRoundInfo(this.roundIdx);
+        // 크립 라운드 전리품 연출 대기
+        if (round && !round.isPvP && !this.battle.isHeadless && isPlayerWon) {
+          if (!this.battle.endCombatScheduled) {
+            this.battle.endCombatScheduled = true;
+            setTimeout(() => {
+              if (this.phase === "combat" && this.battle) {
+                this.endCombat(true);
+              }
+            }, 650);
+          }
+          return;
+        }
+
+        const allBattlesFinished = !this.lobbyBattles || this.lobbyBattles.every(b => b.finished);
+        if (allBattlesFinished) {
+          this.endCombat(isPlayerWon);
+          return;
+        }
+
+        // 다른 AI 결투장이 아직 진행 중일 때: 플레이어 전투 종료 후 약 2.2초 대기 후 자동 결산
+        if (!this.battle.postFinishTimer) this.battle.postFinishTimer = 0;
+        this.battle.postFinishTimer += TICK_MS;
+        if (this.battle.postFinishTimer >= 2200) {
+          this.endCombat(isPlayerWon);
+          return;
+        }
+      } else {
+        // 다른 결투장을 실시간 관전 중인 경우
+        if (!this.battle.spectatorWaitTimer) this.battle.spectatorWaitTimer = 0;
+        this.battle.spectatorWaitTimer += TICK_MS;
+
+        const isViewedFinished = viewedBattle ? viewedBattle.finished : true;
+        if (isViewedFinished && this.battle.spectatorWaitTimer >= 2000) {
+          this.endCombat(isPlayerWon);
+          return;
+        }
+        if (this.battle.spectatorWaitTimer >= 15000) {
+          this.endCombat(isPlayerWon);
+          return;
+        }
+      }
     }
   }
 
@@ -5719,7 +6044,7 @@ class TFTGame {
     unit.attackCount++;
     if (battle.currentTime - battle.lastAttackSoundAt >= 200) {
       battle.lastAttackSoundAt = battle.currentTime;
-      sound.playAttack();
+      if (battle.audio) battle.audio.playAttack();
     }
     this.animateAttack(battle, unit, target);
 
@@ -5743,8 +6068,8 @@ class TFTGame {
     // 진: 매 4번째 공격은 잃은 체력 비례 치명타 탄환
     if (unit.champ.id === "jhin" && unit.attackCount % 4 === 0) {
       damage = unit.ad * (2 + unit.star * 0.5) + (target.maxHp - target.hp) * 0.25;
-      this.spawnBurstEffect(target.x, target.y, "🎭💥", 700);
-      sound.playSkillSound("slash");
+      this.spawnBurstEffect(target.x, target.y, "🎭💥", 700, battle);
+      if (battle.audio) battle.audio.playSkillSound("slash");
     }
     this.dealDamage(battle, unit, target, damage, "physical");
 
@@ -5753,7 +6078,7 @@ class TFTGame {
       const extraFoes = battle.getEnemiesInRange(unit, (unit.champ.range || 1) + 1, 3).filter(e => e.uid !== target.uid);
       if (extraFoes.length > 0) {
         this.dealDamage(battle, unit, extraFoes[0], damage * 0.75, "physical");
-        this.spawnBurstEffect(extraFoes[0].x, extraFoes[0].y, "🏹", 400);
+        this.spawnBurstEffect(extraFoes[0].x, extraFoes[0].y, "🏹", 400, battle);
       }
     }
 
@@ -5763,7 +6088,7 @@ class TFTGame {
       chainTargets.forEach(e => {
         this.dealDamage(battle, unit, e, 80, "magic");
       });
-      this.spawnBurstEffect(target.x, target.y, "⚡", 600);
+      this.spawnBurstEffect(target.x, target.y, "⚡", 600, battle);
     }
 
     // 마나 충전 (평타당 10 + 쇼진/아이템 manaOnHit) → 스킬 시전
@@ -5789,8 +6114,8 @@ class TFTGame {
       target.spearStacks = (target.spearStacks || 0) + 1;
       const executeDamage = target.spearStacks * 25 * unit.star;
       if (executeDamage >= target.hp) {
-        this.spawnBurstEffect(target.x, target.y, "🏹💥", 600);
-        sound.playSkillSound("slash");
+        this.spawnBurstEffect(target.x, target.y, "🏹💥", 600, battle);
+        if (battle.audio) battle.audio.playSkillSound("slash");
         battle.instantEliminate(target, "뽑아찢기!");
       }
     }
@@ -5803,8 +6128,8 @@ class TFTGame {
     if (target.hasSpellShield) {
       target.hasSpellShield = false;
       unit.stunnedUntil = Math.max(unit.stunnedUntil, battle.currentTime + 4000);
-      this.spawnDamagePopup(target.x, target.y - 30, "스킬 무효화!", "heal");
-      this.spawnDamagePopup(unit.x, unit.y - 30, "기절! (4초)", "magic");
+      this.spawnDamagePopup(target.x, target.y - 30, "스킬 무효화!", "heal", battle);
+      this.spawnDamagePopup(unit.x, unit.y - 30, "기절! (4초)", "magic", battle);
       return;
     }
 
@@ -5815,8 +6140,8 @@ class TFTGame {
       el.classList.add("casting");
     }
 
-    // 5코스트 궁극기 및 대형 스킬 시전 시 화면 진동
-    if (["sett", "leeSin", "galio", "warwick", "sejuani"].includes(unit.champ.id)) {
+    // 5코스트 궁극기 및 대형 스킬 시전 시 화면 진동 (현재 보고 있는 결투장만)
+    if (battle === this.getCurrentlyViewedBattle() && ["sett", "leeSin", "galio", "warwick", "sejuani"].includes(unit.champ.id)) {
       document.body.classList.add("screen-shake");
       setTimeout(() => document.body.classList.remove("screen-shake"), 300);
     }
@@ -5828,7 +6153,7 @@ class TFTGame {
     const slamChamps = ["sett", "leeSin", "galio"];
     const slashChamps = ["yasuo", "yone", "katarina", "garen", "diana"];
     const soundType = slamChamps.includes(unit.champ.id) ? "slam" : slashChamps.includes(unit.champ.id) ? "slash" : "burst";
-    sound.playSkillSound(soundType);
+    if (battle.audio) battle.audio.playSkillSound(soundType);
 
     unit.champ.skill(unit, target, battle);
 
@@ -5854,8 +6179,10 @@ class TFTGame {
   }
 
   // 초대형 스킬 컷인 배너 (스킬 이름이 한눈에 띔)
-  spawnSkillAnnouncement(x, y, champ, side) {
-    if (this.battle && this.battle.isHeadless) return;
+  spawnSkillAnnouncement(x, y, champ, side, battle = null) {
+    const viewed = this.getCurrentlyViewedBattle();
+    if (battle && viewed && battle !== viewed) return;
+    if (viewed && viewed.isHeadless) return;
     const banner = document.createElement("div");
     banner.className = `skill-cutin-banner side-${side}`;
     banner.style.left = `${x}px`;
@@ -5871,7 +6198,9 @@ class TFTGame {
 
   // 챔피언별 시각적 쾌감을 주는 거대 스페셜 이펙트
   spawnChampionSpecialVFX(battle, caster, target) {
-    if (this.battle && this.battle.isHeadless) return;
+    const viewed = this.getCurrentlyViewedBattle();
+    if (battle && viewed && battle !== viewed) return;
+    if (viewed && viewed.isHeadless) return;
     const cid = caster.champ.id;
     const tx = target ? target.x : caster.x;
     const ty = target ? target.y : caster.y;
@@ -6129,6 +6458,7 @@ class TFTGame {
 
   // 미니언/크립 처치 시 아이템 전리품 드롭 애니메이션 (통통 튀는 바운스 후 인벤토리로 흡수)
   triggerMinionLootDrop(battle, unit, itemId) {
+    if (!battle || !battle.isPlayerMatch) return;
     if (!itemId || !ITEMS[itemId]) return;
     const itemObj = ITEMS[itemId];
 
@@ -6276,21 +6606,24 @@ class TFTGame {
     const hp = isLord ? 2800 : 1400;
     const ad = isLord ? 140 : 80;
     const isPlayer = side === "player";
+    const isViewed = (battle === this.getCurrentlyViewedBattle());
 
-    // 화면 오버레이 & 진동
-    const overlay = document.createElement("div");
-    overlay.className = `galio-landing-overlay ${isPlayer ? '' : 'enemy-galio'}`;
-    overlay.innerHTML = `
-      <div class="galio-avatar">🗿⚡</div>
-      <div class="galio-banner">${isPlayer ? '' : '적 '}${isLord ? "마왕 갈리오 강림!" : "폭군 갈리오 강림!"}</div>
-    `;
-    this.dom.overlayContainer.appendChild(overlay);
-    document.body.classList.add("screen-shake");
-    sound.playSkillSound("galio");
-    setTimeout(() => {
-      overlay.remove();
-      document.body.classList.remove("screen-shake");
-    }, 1000);
+    // 화면 오버레이 & 진동 (현재 보고 있는 결투장일 때만 연출)
+    if (isViewed && !battle.isHeadless) {
+      const overlay = document.createElement("div");
+      overlay.className = `galio-landing-overlay ${isPlayer ? '' : 'enemy-galio'}`;
+      overlay.innerHTML = `
+        <div class="galio-avatar">🗿⚡</div>
+        <div class="galio-banner">${isPlayer ? '' : '적 '}${isLord ? "마왕 갈리오 강림!" : "폭군 갈리오 강림!"}</div>
+      `;
+      this.dom.overlayContainer.appendChild(overlay);
+      document.body.classList.add("screen-shake");
+      if (battle.audio) sound.playSkillSound("galio");
+      setTimeout(() => {
+        overlay.remove();
+        document.body.classList.remove("screen-shake");
+      }, 1000);
+    }
 
     battle.schedule(1000, () => {
       // 착지 지점: 상대 진영 쪽 중앙 (적이 가장 많은 곳 근처)
@@ -6339,13 +6672,13 @@ class TFTGame {
   }
 
   // 전투 렌더링: 토큰을 한 번만 만들고 위치/체력만 갱신 (매 틱 DOM 재생성 X)
-  renderCombatState() {
-    const battle = this.battle;
+  renderCombatState(battle = null) {
+    if (!battle) battle = this.getCurrentlyViewedBattle();
     if (!battle) return;
 
     if (!battle.layer) {
       const layer = document.createElement("div");
-      layer.id = "combat-layer";
+      layer.id = `combat-layer-${battle.id}`;
       layer.className = "combat-layer";
       this.dom.boardGrid.appendChild(layer);
       battle.layer = layer;
@@ -6399,8 +6732,10 @@ class TFTGame {
     });
   }
 
-  spawnDamagePopup(x, y, text, type = "physical") {
-    if (this.battle && this.battle.isHeadless) return;
+  spawnDamagePopup(x, y, text, type = "physical", battle = null) {
+    const viewed = this.getCurrentlyViewedBattle();
+    if (battle && viewed && battle !== viewed) return;
+    if (viewed && viewed.isHeadless) return;
     const pop = document.createElement("div");
     pop.className = `damage-popup damage-${type}`;
     pop.style.left = `${x + (Math.random() - 0.5) * 24}px`;
@@ -6410,8 +6745,10 @@ class TFTGame {
     setTimeout(() => pop.remove(), 800);
   }
 
-  spawnShockwave(x, y, color = "#38bdf8", size = 180) {
-    if (this.battle && this.battle.isHeadless) return;
+  spawnShockwave(x, y, color = "#38bdf8", size = 180, battle = null) {
+    const viewed = this.getCurrentlyViewedBattle();
+    if (battle && viewed && battle !== viewed) return;
+    if (viewed && viewed.isHeadless) return;
     const sw = document.createElement("div");
     sw.className = "skill-shockwave";
     sw.style.left = `${x}px`;
@@ -6423,8 +6760,10 @@ class TFTGame {
     setTimeout(() => sw.remove(), 550);
   }
 
-  spawnBurstEffect(x, y, emoji, duration = 650) {
-    if (this.battle && this.battle.isHeadless) return;
+  spawnBurstEffect(x, y, emoji, duration = 650, battle = null) {
+    const viewed = this.getCurrentlyViewedBattle();
+    if (battle && viewed && battle !== viewed) return;
+    if (viewed && viewed.isHeadless) return;
 
     // 이모지 속성에 따른 테마 색상 자동 감지
     let color = "#fbbf24";
@@ -6437,7 +6776,7 @@ class TFTGame {
     else if (emoji.includes("😱") || emoji.includes("🎴")) color = "#a855f7";
 
     // 대형 스킬 충격파 링 생성 (180px)
-    this.spawnShockwave(x, y, color, 180);
+    this.spawnShockwave(x, y, color, 180, battle);
 
     const eff = document.createElement("div");
     eff.className = "skill-effect-burst";
@@ -6476,9 +6815,31 @@ class TFTGame {
     }
 
     const battle = this.battle;
+    const battleSummaries = (this.lobbyBattles && this.lobbyBattles.length > 0)
+      ? this.lobbyBattles.map(b => ({
+          homePlayerId: b.homePlayerId,
+          awayPlayerId: b.awayPlayerId,
+          winner: b.winner,
+          survivors: b.survivors,
+          isPvE: b.isPvE,
+          isPlayerMatch: b.isPlayerMatch,
+          isGhostMatch: b.isGhostMatch
+        }))
+      : null;
+
+    if (this.lobbyBattles) {
+      this.lobbyBattles.forEach(b => {
+        if (b.layer) b.layer.remove();
+      });
+      this.lobbyBattles = [];
+    }
     this.battle = null;
     if (battle && battle.layer) battle.layer.remove();
     this.dom.boardGrid.classList.remove("in-combat");
+
+    // 만약 관전 중이었다면 정찰 상태 리셋
+    this.scoutedPlayerId = null;
+    this.updateScoutBanner();
 
     const round = this.getRoundInfo(this.roundIdx) || {};
     const currentPvPOpp = this.getCurrentRoundOpponent();
@@ -6567,7 +6928,7 @@ class TFTGame {
     }
 
     // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
-    this.simulateLobbyDamage(currentPvPOpp, playerWon, pvpDamageToOpponent, stageNum);
+    this.simulateLobbyDamage(currentPvPOpp, playerWon, pvpDamageToOpponent, stageNum, battleSummaries);
 
     // 1. 게임 오버 체크 (HP 소진 시 즉시 종료 - 추가 보상 없음)
     if (this.player.hp <= 0) {
@@ -6811,25 +7172,35 @@ class TFTGame {
       this.combatInterval = null;
     }
 
-    const battle = this.battle;
-    battle.isHeadless = true;
+    // 모든 전투를 headless 모드로 전환
+    if (this.lobbyBattles && this.lobbyBattles.length > 0) {
+      this.lobbyBattles.forEach(b => { b.isHeadless = true; });
+    } else if (this.battle) {
+      this.battle.isHeadless = true;
+    }
 
     // 효과음 일시 차단
     const origMuted = sound.muted;
     sound.muted = true;
 
-    // 최대 450틱(45초) 동안 승패가 결정될 때까지 즉시 루프 실행
+    // 최대 450틱(45초) 동안 모든 전투가 결정될 때까지 즉시 루프 실행
     let safetyCounter = 0;
     while (this.phase === "combat" && this.battle && safetyCounter < 450) {
       safetyCounter++;
-      this.combatTick();
+      const unfinished = (this.lobbyBattles && this.lobbyBattles.length > 0)
+        ? this.lobbyBattles.filter(b => !b.finished)
+        : (this.battle.finished ? [] : [this.battle]);
+
+      if (unfinished.length === 0) break;
+      unfinished.forEach(b => this.stepBattleTick(b));
     }
 
     sound.muted = origMuted;
 
     // 시간 초과 등으로 여전히 전투 중이면 무승부/패배 강제 처리
     if (this.phase === "combat") {
-      this.endCombat(false);
+      const pWon = this.battle ? (this.battle.winner === "player") : false;
+      this.endCombat(pWon);
     }
   }
 
@@ -6840,6 +7211,10 @@ class TFTGame {
     if (this.combatInterval) {
       clearInterval(this.combatInterval);
       this.combatInterval = null;
+    }
+    if (this.lobbyBattles) {
+      this.lobbyBattles.forEach(b => { if (b.layer) b.layer.remove(); });
+      this.lobbyBattles = [];
     }
     this.battle = null;
     this.dom.boardGrid.classList.remove("in-combat");
