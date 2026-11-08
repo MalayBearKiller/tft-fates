@@ -2045,14 +2045,32 @@ class TFTGame {
   }
 
   // 라운드 종료 시 로비 AI 플레이어들 간의 전투 피해 시뮬레이션
-  simulateLobbyDamage() {
-    const stageStr = String(ROUNDS[this.roundIdx]?.stage || "1").split("-")[0];
-    const stageNum = parseInt(stageStr, 10) || 1;
+  simulateLobbyDamage(currentPvPOpp = null, playerWon = false, pvpDamage = 0, stageNum = null) {
+    if (stageNum === null) {
+      const stageStr = String(ROUNDS[this.roundIdx]?.stage || "1").split("-")[0];
+      stageNum = parseInt(stageStr, 10) || 1;
+    }
     if (stageNum <= 1) return; // 미니언 크립 라운드는 데미지 없음
 
     this.lobbyOpponents.forEach(p => {
       if (p.isPlayer || !p.isAlive) return;
-      // 55% 확률로 패배하여 체력 차감
+
+      // 이번 라운드에 플레이어와 직접 PvP를 진행한 상대
+      if (currentPvPOpp && p.id === currentPvPOpp.id) {
+        if (playerWon) {
+          const dmg = pvpDamage > 0 ? pvpDamage : ((stageNum * 4) + Math.floor(Math.random() * 6));
+          p.hp = Math.max(0, p.hp - dmg);
+          if (p.hp === 0) p.isAlive = false;
+          p.lossStreak++;
+          p.winStreak = 0;
+        } else {
+          p.winStreak++;
+          p.lossStreak = 0;
+        }
+        return;
+      }
+
+      // 나머지 AI 상대들 간의 시뮬레이션: 55% 확률로 패배하여 체력 차감
       if (Math.random() < 0.55) {
         const dmg = (stageNum * 4) + Math.floor(Math.random() * 6);
         p.hp = Math.max(0, p.hp - dmg);
@@ -2902,6 +2920,8 @@ class TFTGame {
 
   // 전투 종료 & 라운드 정산
   endCombat(playerWon) {
+    if (this.phase !== "combat") return;
+
     if (this.combatInterval) {
       clearInterval(this.combatInterval);
       this.combatInterval = null;
@@ -2913,8 +2933,13 @@ class TFTGame {
     this.dom.boardGrid.classList.remove("in-combat");
 
     const round = ROUNDS[this.roundIdx] || {};
+    const currentPvPOpp = this.getCurrentRoundOpponent();
+    const stageStr = String(round.stage || "1").split("-")[0];
+    const stageNum = parseInt(stageStr, 10) || 1;
     const counts = battle ? battle.sides.player.counts : this.updateSynergies();
     const log = [];
+
+    let pvpDamageToOpponent = 0;
 
     if (playerWon) {
       sound.playVictory();
@@ -2923,6 +2948,10 @@ class TFTGame {
         this.player.lossStreak = 0;
         this.player.gold += 1; // PvP 승리 수당 +1G
         log.push("승리 수당 +1");
+
+        // 내가 이긴 PvP 상대에게 가할 데미지 계산 (기본 스테이지 피해 + 살아남은 아군 1기당 2)
+        const alivePlayers = battle ? battle.units.filter(u => u.side === "player" && u.hp > 0).length : 1;
+        pvpDamageToOpponent = (stageNum * 3) + alivePlayers * 2;
       }
 
       // 행운(Fortune) 시너지 보상
@@ -2959,7 +2988,6 @@ class TFTGame {
 
       // 패배 시 플레이어 HP 차감: 스테이지 기본 피해 + 살아남은 적 1기당 2
       const aliveEnemies = battle ? battle.units.filter(u => u.side === "enemy" && u.hp > 0).length : 1;
-      const stageNum = parseInt(String(round.stage || "1").split("-")[0], 10) || 1;
       const damageTaken = stageNum + aliveEnemies * 2;
       this.player.hp = Math.max(0, this.player.hp - damageTaken);
       log.push(`❤️ -${damageTaken}`);
@@ -2969,8 +2997,52 @@ class TFTGame {
       }
     }
 
+    // 게임 오버 체크 (HP 소진 시 다음 라운드 골드/이자/경험치 없이 즉시 종료)
+    if (this.player.hp <= 0) {
+      this.phase = "gameover";
+      this.setCombatButtonState(false);
+      this.showToastNotification(`💔 패배... ${log.join("  ")}`, "error");
+      this.updateHUD();
+      this.updateScoreboardUI();
+      this.showGameOverModal();
+      return;
+    }
+
+    // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
+    this.simulateLobbyDamage(currentPvPOpp, playerWon, pvpDamageToOpponent, stageNum);
+
+    // 다음 라운드로 전환
+    this.roundIdx++;
+    this.syncLobbyOpponentsGrowth();
+
+    // 완주 또는 로비 생존자 체크 (우승 / 최종 순위 판정)
+    const aliveOpponents = this.lobbyOpponents ? this.lobbyOpponents.filter(o => !o.isPlayer && o.isAlive) : [];
+    if (this.roundIdx >= ROUNDS.length || aliveOpponents.length === 0) {
+      this.phase = "victory";
+      this.setCombatButtonState(false);
+      this.showToastNotification(`${playerWon ? "🏆 승리!" : "💔 패배..."}  ${log.join("  ")}`, playerWon ? "success" : "error");
+      this.updateHUD();
+      this.updateScoreboardUI();
+
+      // 플레이어 및 상대 체력 기반 최종 순위 계산
+      const playerEntry = this.lobbyOpponents ? this.lobbyOpponents.find(o => o.isPlayer || o.id === "player") : null;
+      if (playerEntry) {
+        playerEntry.hp = this.player.hp;
+        playerEntry.isAlive = (this.player.hp > 0);
+      }
+      const sorted = this.lobbyOpponents ? [...this.lobbyOpponents].sort((a, b) => {
+        if (a.isAlive && !b.isAlive) return -1;
+        if (!a.isAlive && b.isAlive) return 1;
+        return b.hp - a.hp;
+      }) : [];
+      const rank = Math.max(1, sorted.findIndex(o => o.isPlayer || o.id === "player") + 1);
+
+      this.showVictoryModal(rank);
+      return;
+    }
+
     // 다음 라운드 공식 기본 골드 지급 (1-2: 2G, 1-3: 2G, 2-1: 4G, 2-2+: 5G)
-    const nextRound = ROUNDS[this.roundIdx + 1];
+    const nextRound = ROUNDS[this.roundIdx];
     const baseGold = (nextRound && nextRound.roundGold !== undefined) ? nextRound.roundGold : 5;
 
     // 이자 (10G당 1G, 최대 5G)
@@ -2990,24 +3062,6 @@ class TFTGame {
 
     // 경험치 +2
     this.gainExp(2);
-
-    // 게임 오버 체크
-    if (this.player.hp <= 0) {
-      this.updateHUD();
-      this.showGameOverModal();
-      return;
-    }
-
-    // 다음 라운드로 전환
-    this.roundIdx++;
-    this.syncLobbyOpponentsGrowth();
-    this.simulateLobbyDamage();
-    if (this.roundIdx >= ROUNDS.length) {
-      this.updateHUD();
-      this.updateScoreboardUI();
-      this.showVictoryModal();
-      return;
-    }
 
     // 준비 단계 복귀
     this.phase = "planning";
@@ -3040,28 +3094,53 @@ class TFTGame {
   }
 
   showGameOverModal() {
+    let rank = 8;
+    if (this.lobbyOpponents) {
+      const playerEntry = this.lobbyOpponents.find(o => o.isPlayer || o.id === "player");
+      if (playerEntry) {
+        playerEntry.hp = 0;
+        playerEntry.isAlive = false;
+      }
+      const sorted = [...this.lobbyOpponents].sort((a, b) => {
+        if (a.isAlive && !b.isAlive) return -1;
+        if (!a.isAlive && b.isAlive) return 1;
+        return b.hp - a.hp;
+      });
+      rank = Math.max(1, sorted.findIndex(o => o.isPlayer || o.id === "player") + 1);
+    }
+
     const modal = document.createElement("div");
     modal.className = "info-modal";
     modal.innerHTML = `
       <div class="modal-content">
-        <h2>💀 패배 (Game Over)</h2>
-        <p>체력이 모두 소진되었습니다.<br>도달 라운드: <strong>${ROUNDS[this.roundIdx]?.stage || '최종'}</strong></p>
+        <h2>💀 패배 (Game Over - ${rank}등)</h2>
+        <p>체력이 모두 소진되었습니다.<br>최종 순위: <strong>${rank}등</strong> (도달 라운드: <strong>${ROUNDS[this.roundIdx]?.stage || '최종'}</strong>)</p>
         <button class="btn-action" onclick="location.reload()">다시 도전하기</button>
       </div>
     `;
     this.dom.modalContainer.appendChild(modal);
   }
 
-  showVictoryModal() {
+  showVictoryModal(rank = 1) {
     const modal = document.createElement("div");
     modal.className = "info-modal";
-    modal.innerHTML = `
-      <div class="modal-content">
-        <h2>🏆 최종 우승 (1등 달성!)</h2>
-        <p>TFT 시즌 4: 운명의 모든 라운드를 클리어하고 챔피언이 되었습니다!<br>완성 덱의 위력이 대단했습니다.</p>
-        <button class="btn-action" onclick="location.reload()">새로운 덱으로 시작하기</button>
-      </div>
-    `;
+    if (rank === 1) {
+      modal.innerHTML = `
+        <div class="modal-content">
+          <h2>🏆 최종 우승 (1등 달성!)</h2>
+          <p>TFT 시즌 4: 운명의 모든 라운드를 클리어하고 최종 <strong>1등</strong>으로 챔피언이 되었습니다!<br>완성 덱의 위력이 대단했습니다.</p>
+          <button class="btn-action" onclick="location.reload()">새로운 덱으로 시작하기</button>
+        </div>
+      `;
+    } else {
+      modal.innerHTML = `
+        <div class="modal-content">
+          <h2>🎖️ 경기 종료 (최종 ${rank}등)</h2>
+          <p>TFT 시즌 4: 운명의 모든 라운드를 완주했습니다!<br>최종 순위 <strong>${rank}등</strong>으로 경기를 마쳤습니다.</p>
+          <button class="btn-action" onclick="location.reload()">다시 도전하기</button>
+        </div>
+      `;
+    }
     this.dom.modalContainer.appendChild(modal);
   }
 
