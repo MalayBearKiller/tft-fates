@@ -531,6 +531,38 @@
         game.renderItemInventory();
         assert(game.player.itemInventory.length === 1 && game.player.itemInventory[0] === acquiredId, 'renderItemInventory cleanses invalid/undefined items');
 
+        // TEST 12: Minion death item drop & UI Dimensions
+        game.resetGame();
+        game.player.itemInventory = [];
+        assert(game.roundIdx === 0, 'Round is 1-1');
+        game.board[4][3] = {
+          uid: 'p_test_champ',
+          champ: tftData.CHAMPIONS[0],
+          star: 2,
+          maxHp: 1500,
+          hp: 1500,
+          ad: 300,
+          mana: 0,
+          items: [],
+          side: 'player'
+        };
+        game.startCombat();
+        assert(game.phase === 'combat', 'Combat started in 1-1');
+        const minionWithLoot = game.battle.units.find(u => u.side === 'enemy' && !!u.lootDropItemId);
+        assert(!!minionWithLoot, '1-1 minion assigned random loot item: ' + (minionWithLoot && minionWithLoot.lootDropItemId));
+        game.skipCombat();
+        assert(game.player.itemInventory.length >= 1, 'Minion item drop delivered to player inventory (count: ' + game.player.itemInventory.length + ')');
+
+        // Verify Item Slot and Synergy Text Sizes
+        const slotEl = document.querySelector('.item-slot');
+        assert(!!slotEl && slotEl.getBoundingClientRect().width >= 50, 'Item slot width is enlarged (>= 50px): ' + (slotEl && slotEl.getBoundingClientRect().width));
+
+        const synNameEl = document.querySelector('.synergy-orb-name');
+        if (synNameEl) {
+          const fontSize = parseFloat(window.getComputedStyle(synNameEl).fontSize);
+          assert(fontSize >= 14, 'Synergy orb name font-size is enlarged (>= 14px): ' + fontSize);
+        }
+
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';
         document.title = 'ALL_TESTS_PASSED';
         fetch('/test_result?status=ALL_TESTS_PASSED&assertions=' + results.length);

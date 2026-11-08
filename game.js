@@ -2962,6 +2962,19 @@ class TFTGame {
       }
     }
 
+    // 미니언/크립 라운드일 경우, 적 유닛에 랜덤 아이템 드롭 배정 (처치 시 드롭 모션 발동)
+    const round = this.getRoundInfo(this.roundIdx);
+    if (round && !round.isPvP) {
+      const stageNum = parseInt(String(round.stage || "1").split("-")[0], 10) || 1;
+      const dropCount = (stageNum === 1) ? 1 : (stageNum >= 4 ? 3 : 2);
+      const enemyUnits = units.filter(u => u.side === "enemy");
+      const shuffled = [...enemyUnits].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(dropCount, shuffled.length); i++) {
+        const randomBaseId = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
+        shuffled[i].lootDropItemId = randomBaseId;
+      }
+    }
+
     const battle = {
       id: ++this.battleSeq,
       currentTime: 0, // 시뮬레이션 시간(ms) - 탭이 백그라운드여도 일관되게 동작
@@ -3695,6 +3708,13 @@ class TFTGame {
       // 2. 최종 사망 처리
       defender.hp = 0;
 
+      // 미니언/크립 처치 시 아이템 드롭 모션 발동
+      if (defender.side === "enemy" && defender.lootDropItemId) {
+        const dropId = defender.lootDropItemId;
+        defender.lootDropItemId = null;
+        this.triggerMinionLootDrop(battle, defender, dropId);
+      }
+
       // 즈롯 차원문: 사망 시 공허 생명체 소환
       if (defender.hasZzrot && !defender.zzrotSpawned) {
         defender.zzrotSpawned = true;
@@ -3717,6 +3737,87 @@ class TFTGame {
       this.triggerSettSitups(battle, defender);
     }
     return amount;
+  }
+
+  // 미니언/크립 처치 시 아이템 전리품 드롭 애니메이션 (통통 튀는 바운스 후 인벤토리로 흡수)
+  triggerMinionLootDrop(battle, unit, itemId) {
+    if (!itemId) return;
+    const itemObj = ITEMS[itemId];
+
+    // 스킵/headless 모드일 경우 즉시 인벤토리에 추가
+    if (battle.isHeadless) {
+      if (!this.player.itemInventory) this.player.itemInventory = [];
+      if (this.player.itemInventory.length < 10) {
+        this.player.itemInventory.push(itemId);
+        this.renderItemInventory();
+      }
+      return;
+    }
+
+    if (this.player.itemInventory && this.player.itemInventory.length >= 10) {
+      this.showToastNotification("아이템 보관함이 가득 차 전리품을 획득할 수 없습니다!", "warning");
+      return;
+    }
+
+    this.pendingLootItems = this.pendingLootItems || [];
+    this.pendingLootItems.push(itemId);
+
+    // 전장 절대 화면 좌표 계산
+    const boardRect = this.dom.boardGrid.getBoundingClientRect();
+    const scale = this.currentBoardScale || 1;
+    const startX = boardRect.left + (unit.x * scale);
+    const startY = boardRect.top + (unit.y * scale);
+
+    // 지면 충격파 VFX
+    const shockwave = document.createElement("div");
+    shockwave.className = "loot-drop-shockwave";
+    shockwave.style.left = `${startX}px`;
+    shockwave.style.top = `${startY}px`;
+    document.body.appendChild(shockwave);
+    setTimeout(() => shockwave.remove(), 550);
+
+    // 튀어나오는 전리품 황금 구체
+    const lootOrb = document.createElement("div");
+    lootOrb.className = "minion-loot-drop-orb";
+    lootOrb.innerHTML = `<div class="loot-orb-box">${itemObj?.icon || "🎁"}</div>`;
+    lootOrb.style.left = `${startX}px`;
+    lootOrb.style.top = `${startY}px`;
+    document.body.appendChild(lootOrb);
+
+    sound.playCombine(1);
+
+    // 450ms 지면 통통 바운스 후 좌측 아이템 인벤토리로 부드럽게 흡수 비행
+    setTimeout(() => {
+      if (!lootOrb.parentNode) return;
+      const invRect = this.dom.itemInventoryPanel ? this.dom.itemInventoryPanel.getBoundingClientRect() : null;
+      const targetX = invRect ? (invRect.left + invRect.width / 2) : 60;
+      const targetY = invRect ? (invRect.top + 70) : 150;
+
+      lootOrb.style.transition = "all 0.55s cubic-bezier(0.22, 1, 0.36, 1)";
+      lootOrb.style.left = `${targetX}px`;
+      lootOrb.style.top = `${targetY}px`;
+      lootOrb.style.transform = "translate(-50%, -50%) scale(0.65)";
+      lootOrb.style.opacity = "0.95";
+
+      setTimeout(() => {
+        lootOrb.remove();
+        const pIdx = this.pendingLootItems.indexOf(itemId);
+        if (pIdx !== -1) this.pendingLootItems.splice(pIdx, 1);
+
+        if (!this.player.itemInventory) this.player.itemInventory = [];
+        if (this.player.itemInventory.length < 10) {
+          this.player.itemInventory.push(itemId);
+          this.renderItemInventory();
+          sound.playCombine(2);
+
+          if (this.dom.itemInventoryPanel) {
+            this.dom.itemInventoryPanel.classList.add("inventory-receive-flash");
+            setTimeout(() => this.dom.itemInventoryPanel.classList.remove("inventory-receive-flash"), 450);
+          }
+          this.showToastNotification(`🎁 미니언 전리품! [${itemObj?.icon || ''} ${itemObj?.name || itemId}] 획득!`, "success");
+        }
+      }, 550);
+    }, 450);
   }
 
   // 즈롯 차원문 공허 생명체 소환 (소환수는 승패 유닛 수 카운트 제외)
@@ -4025,32 +4126,10 @@ class TFTGame {
         this.player.warlordWins++;
       }
 
-      // 크립 라운드 전리품 및 기본 아이템 드롭 보상
+      // 크립 라운드 골드 보상
       if (round.rewardGold) {
         this.player.gold += round.rewardGold;
         log.push(`💰 전리품 +${round.rewardGold}`);
-      }
-      if (!round.isPvP) {
-        // 미니언 및 크립 라운드: 미니언이 랜덤으로 아이템을 직접 떨어뜨림 (선택 모달 X)
-        // 1스테이지 미니언(1-1, 1-2, 1-3): 매 라운드 1개씩 확정 드롭
-        // 2스테이지 이후 크립(2-4, 3-4, 4-4...): 2~3개 랜덤 드롭
-        const dropCount = (stageNum === 1) ? 1 : (stageNum >= 4 ? 3 : 2);
-        let droppedNames = [];
-        for (let i = 0; i < dropCount; i++) {
-          if (!this.player.itemInventory) this.player.itemInventory = [];
-          if (this.player.itemInventory.length < 10) {
-            const randomBaseId = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
-            const baseItemObj = ITEMS[randomBaseId];
-            this.player.itemInventory.push(randomBaseId);
-            droppedNames.push(`${baseItemObj?.icon || '📦'} ${baseItemObj?.name || randomBaseId}`);
-          }
-        }
-        if (droppedNames.length > 0) {
-          this.renderItemInventory();
-          sound.playCombine(2);
-          log.push(`🎁 미니언 전리품: ${droppedNames.join(", ")} 획득!`);
-          this.showToastNotification(`🎁 미니언이 아이템을 떨어뜨렸습니다: ${droppedNames.join(", ")}!`, "success");
-        }
       }
     } else {
       sound.playDefeat();
@@ -4068,6 +4147,30 @@ class TFTGame {
       if (traitTier(counts, "fortune") >= 0) {
         this.player.fortuneStreak++;
       }
+    }
+
+    // 미니언/크립 라운드 전리품 안전 수거 및 플러시 (승패 무관)
+    if (!round.isPvP) {
+      if (this.pendingLootItems && this.pendingLootItems.length > 0) {
+        if (!this.player.itemInventory) this.player.itemInventory = [];
+        while (this.pendingLootItems.length > 0 && this.player.itemInventory.length < 10) {
+          this.player.itemInventory.push(this.pendingLootItems.shift());
+        }
+        this.pendingLootItems = [];
+      }
+      if (battle && battle.units && playerWon) {
+        battle.units.forEach(u => {
+          if (u.side === "enemy" && u.lootDropItemId) {
+            if (!this.player.itemInventory) this.player.itemInventory = [];
+            if (this.player.itemInventory.length < 10) {
+              this.player.itemInventory.push(u.lootDropItemId);
+            }
+            u.lootDropItemId = null;
+          }
+        });
+      }
+      this.renderItemInventory();
+      document.querySelectorAll(".minion-loot-drop-orb").forEach(el => el.remove());
     }
 
     // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
@@ -4354,6 +4457,8 @@ class TFTGame {
 
     // 모달창 닫기
     this.dom.modalContainer.innerHTML = "";
+    this.pendingLootItems = [];
+    document.querySelectorAll(".minion-loot-drop-orb, .loot-drop-shockwave").forEach(el => el.remove());
 
     // 플레이어 기본 정보 리셋
     this.player = {
