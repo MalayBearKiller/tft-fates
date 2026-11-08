@@ -77,7 +77,7 @@ function traitTier(counts, traitKey) {
   return tier;
 }
 
-// 유닛 토큰 내부 마크업 (준비 단계 & 전투 공용, 최대 3개 장착 아이템 뱃지 노출)
+// 유닛 토큰 내부 마크업 (준비 단계 & 전투 공용, 캐릭터 사진 및 최대 3개 장착 아이템 뱃지)
 function unitTokenInnerHTML(unit) {
   const borderColor = unit.side === 'enemy' ? '#ef4444' : (unit.isChosen ? "#ffd700" : (COST_BORDER_COLORS[unit.champ.cost] || "#94a3b8"));
   const avatarHtml = unit.champ.image
@@ -104,7 +104,6 @@ function unitTokenInnerHTML(unit) {
     </div>
     ${avatarHtml}
     ${itemsHtml}
-    <div class="unit-name">${unit.champ.name}</div>
   `;
 }
 
@@ -1228,7 +1227,7 @@ class TFTGame {
           <div class="card-top">
             <div class="card-name-group">
               <span class="card-hotkey">${index + 1}</span>
-              <span class="card-name">${baseChamp.name} ${star > 1 ? '★★' : ''}</span>
+              ${star > 1 ? '<span class="card-star-tag">★★</span>' : ''}
             </div>
             <span class="card-cost">${cost} 🪙</span>
           </div>
@@ -1237,6 +1236,7 @@ class TFTGame {
           </div>
         </div>
       `;
+      card.title = `${baseChamp.name} (${cost}골드) - ${baseChamp.skillName || '스킬'}: ${baseChamp.skillDesc || ''}`;
 
       // 마우스 누르는 순간 0ms 즉각 구매 (pointerdown) & 클릭 지원
       card.addEventListener("pointerdown", (e) => {
@@ -4031,8 +4031,10 @@ class TFTGame {
         log.push(`💰 전리품 +${round.rewardGold}`);
       }
       if (!round.isPvP) {
-        // 크립 라운드 승리 시 기본 아이템 1~2개 획득 (스테이지가 높을수록 2개 확률 증가)
-        const dropCount = (stageNum >= 3 && Math.random() < 0.6) ? 2 : 1;
+        // 미니언 및 크립 라운드: 미니언이 랜덤으로 아이템을 직접 떨어뜨림 (선택 모달 X)
+        // 1스테이지 미니언(1-1, 1-2, 1-3): 매 라운드 1개씩 확정 드롭
+        // 2스테이지 이후 크립(2-4, 3-4, 4-4...): 2~3개 랜덤 드롭
+        const dropCount = (stageNum === 1) ? 1 : (stageNum >= 4 ? 3 : 2);
         let droppedNames = [];
         for (let i = 0; i < dropCount; i++) {
           if (!this.player.itemInventory) this.player.itemInventory = [];
@@ -4045,7 +4047,9 @@ class TFTGame {
         }
         if (droppedNames.length > 0) {
           this.renderItemInventory();
-          log.push(`🎁 ${droppedNames.join(", ")} 획득!`);
+          sound.playCombine(2);
+          log.push(`🎁 미니언 전리품: ${droppedNames.join(", ")} 획득!`);
+          this.showToastNotification(`🎁 미니언이 아이템을 떨어뜨렸습니다: ${droppedNames.join(", ")}!`, "success");
         }
       }
     } else {
@@ -4145,15 +4149,9 @@ class TFTGame {
     this.updateHUD();
     this.updateSynergies();
     this.updateScoreboardUI();
-
-    // x-2 라운드 시작 시 무기고 아이템 선택 이벤트 모달 (2-2, 3-2, 4-2, 5-2, 6-2 등)
-    const nextStageStr = String(this.getRoundInfo(this.roundIdx)?.stage || "1-1");
-    if (nextStageStr.endsWith("-2")) {
-      setTimeout(() => this.showItemChoiceModal(), 400);
-    }
   }
 
-  // 무기고 아이템 선택 모달 (3개 중 1개 선택)
+  // 무기고 아이템 선택 모달 (테스트 및 수동 이벤트용 유지)
   showItemChoiceModal() {
     if (this.phase !== "planning") return;
 
