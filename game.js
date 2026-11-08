@@ -1,4 +1,4 @@
-import { DROP_RATES, CHOSEN_DROP_RATES, LEVEL_EXP, TRAITS, CHAMPIONS, ROUNDS } from './data.js';
+import { DROP_RATES, CHOSEN_DROP_RATES, LEVEL_EXP, TRAITS, CHAMPIONS, ROUNDS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS } from './data.js';
 import { sound } from './audio.js';
 
 // ==========================================
@@ -16,13 +16,14 @@ function makeUid(prefix) {
 }
 
 // 성급/선택받은 자 여부에 맞는 유닛 객체 생성
-function makeUnit(champ, star, side, { isChosen = false, chosenTrait = null } = {}) {
+function makeUnit(champ, star, side, { isChosen = false, chosenTrait = null, items = [] } = {}) {
   const unit = {
     uid: makeUid(side === "player" ? "u" : "enemy"),
     champ,
     star,
     isChosen,
     chosenTrait,
+    items: [...items],
     as: champ.as,
     mana: champ.startMana,
     maxMana: champ.maxMana,
@@ -40,7 +41,7 @@ function applyStarStats(unit) {
   unit.ad = Math.round(unit.champ.ad * mult + (unit.isChosen ? CHOSEN_BONUS.ad : 0));
 }
 
-// 시너지 카운트 (같은 챔피언은 1번만, 선택받은 자 특성은 +1)
+// 시너지 카운트 (같은 챔피언은 1번만, 선택받은 자 특성은 +1, 상징 아이템 특성 부여)
 function countTraits(units) {
   const counts = {};
   const seen = new Set();
@@ -51,6 +52,17 @@ function countTraits(units) {
     }
     if (u.isChosen && u.chosenTrait) {
       counts[u.chosenTrait] = (counts[u.chosenTrait] || 0) + 1;
+    }
+    // 상징 아이템 특성 부여
+    if (u.items && u.items.length > 0) {
+      u.items.forEach(itemId => {
+        const item = ITEMS[itemId];
+        if (item && item.grantTrait) {
+          if (!u.champ.traits.includes(item.grantTrait)) {
+            counts[item.grantTrait] = (counts[item.grantTrait] || 0) + 1;
+          }
+        }
+      });
     }
   });
   return counts;
@@ -65,7 +77,7 @@ function traitTier(counts, traitKey) {
   return tier;
 }
 
-// 유닛 토큰 내부 마크업 (준비 단계 & 전투 공용)
+// 유닛 토큰 내부 마크업 (준비 단계 & 전투 공용, 최대 3개 장착 아이템 뱃지 노출)
 function unitTokenInnerHTML(unit) {
   const borderColor = unit.side === 'enemy' ? '#ef4444' : (unit.isChosen ? "#ffd700" : (COST_BORDER_COLORS[unit.champ.cost] || "#94a3b8"));
   const avatarHtml = unit.champ.image
@@ -74,6 +86,16 @@ function unitTokenInnerHTML(unit) {
     : `<span class="unit-icon">${unit.champ.icon}</span>`;
   const hpPct = Math.max(0, Math.min(100, (unit.hp / unit.maxHp) * 100));
   const manaPct = unit.maxMana > 0 ? Math.min(100, (unit.mana / unit.maxMana) * 100) : 0;
+
+  const itemsHtml = (unit.items && unit.items.length > 0)
+    ? `<div class="unit-items-tray">
+        ${unit.items.slice(0, 3).map(id => {
+          const it = ITEMS[id];
+          return it ? `<span class="unit-item-badge" title="${it.name}">${it.icon}</span>` : '';
+        }).join('')}
+       </div>`
+    : '';
+
   return `
     <div class="unit-stars ${unit.star === 4 ? 'star-4' : ''}">${STAR_TEXT[unit.star] || ''}</div>
     <div class="unit-bars">
@@ -81,6 +103,7 @@ function unitTokenInnerHTML(unit) {
       <div class="unit-mana-bar ${manaPct >= 100 ? 'mana-full' : ''}"><div class="unit-mana-fill" style="width: ${manaPct}%"></div></div>
     </div>
     ${avatarHtml}
+    ${itemsHtml}
     <div class="unit-name">${unit.champ.name}</div>
   `;
 }
@@ -219,12 +242,13 @@ class TFTGame {
       winStreak: 0,
       lossStreak: 0,
       fortuneStreak: 0,
-      warlordWins: 0 // 대장군 활성 상태 승리 횟수 (최대 5회 중첩)
+      warlordWins: 0, // 대장군 활성 상태 승리 횟수 (최대 5회 중첩)
+      itemInventory: [] // 아이템 보관함 (최대 10개)
     };
 
     this.synergyPage = 0;
     this.roundIdx = 0;
-    this.phase = "planning"; // "planning" | "combat"
+    this.phase = "planning"; // "planning" | "combat" | "gameover" | "victory"
     this.shopLocked = false;
     this.shopSlots = [null, null, null, null, null];
 
@@ -233,9 +257,10 @@ class TFTGame {
     // 벤치 (9칸)
     this.bench = Array(9).fill(null);
 
-    // 드래그 중인 유닛 정보
+    // 드래그 중인 유닛/아이템 정보
     this.draggedUnit = null;
     this.dragSource = null; // { type: 'bench', index: 0 } or { type: 'board', row: 3, col: 0 }
+    this.draggedItemInfo = null; // { itemId, inventoryIndex }
     this.selectedUnitInfo = null; // 클릭으로 선택된 유닛 정보 (Click-to-Move 지원)
     this.hoveredUnit = null;
 
@@ -305,8 +330,341 @@ class TFTGame {
       scoutBannerText: document.getElementById("scout-banner-text"),
       btnReturnHome: document.getElementById("btn-return-home"),
       playerInterestPods: document.getElementById("player-interest-pods"),
-      enemyInterestPods: document.getElementById("enemy-interest-pods")
+      enemyInterestPods: document.getElementById("enemy-interest-pods"),
+      itemInventoryPanel: document.getElementById("item-inventory-panel"),
+      itemInventorySlots: document.getElementById("item-inventory-slots"),
+      inventoryCount: document.getElementById("inventory-count")
     };
+
+    let tip = document.getElementById("item-tooltip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.id = "item-tooltip";
+      tip.className = "item-tooltip";
+      document.body.appendChild(tip);
+    }
+    this.dom.itemTooltip = tip;
+  }
+
+  // 자연의 힘 개수 (필드, 벤치, 인벤토리 포함)
+  getForceOfNatureCount() {
+    let extra = 0;
+    for (let r = 3; r < 6; r++) {
+      for (let c = 0; c < 7; c++) {
+        const u = this.board[r][c];
+        if (u && u.items) {
+          u.items.forEach(id => { if (id === "force_of_nature") extra++; });
+        }
+      }
+    }
+    this.bench.forEach(u => {
+      if (u && u.items) {
+        u.items.forEach(id => { if (id === "force_of_nature") extra++; });
+      }
+    });
+    if (this.player && this.player.itemInventory) {
+      this.player.itemInventory.forEach(id => { if (id === "force_of_nature") extra++; });
+    }
+    return extra;
+  }
+
+  // 팀의 최대 배치 가능 인원수 (레벨 + 자연의 힘 보너스)
+  getMaxTeamSize() {
+    return (this.player ? this.player.level : 1) + this.getForceOfNatureCount();
+  }
+
+  // 라운드 정보 동적 조회 (13라운드 이후 무한 자동 생성)
+  getRoundInfo(idx) {
+    if (idx < ROUNDS.length) {
+      return ROUNDS[idx];
+    }
+    const extra = idx - ROUNDS.length;
+    const stageMajor = 6 + Math.floor(extra / 4);
+    const stageMinor = (extra % 4) + 1;
+    const isPvP = (stageMinor !== 4);
+
+    if (isPvP) {
+      const opp = this.getCurrentRoundOpponent();
+      return {
+        stage: `${stageMajor}-${stageMinor}`,
+        name: `스테이지 ${stageMajor}-${stageMinor} (PvP 결투)`,
+        roundType: "pvp",
+        typeIcon: "⚔️",
+        opponentId: opp ? opp.id : null,
+        opponentName: opp ? `${opp.name} (Lv.${opp.level || Math.min(9, stageMajor + 2)})` : "AI 도전자",
+        opponentDesc: "최후의 1인을 가리는 심화 결투입니다.",
+        opponentSynergies: "치열한 후반 결투",
+        roundGold: 5,
+        isPvP: true,
+        enemies: (opp && opp.board && opp.board.length > 0) ? opp.board : [
+          { champId: "sett", star: 2, col: 3, row: 2, items: ["warmogs_armor", "titans_resolve"] },
+          { champId: "leesin", star: 2, col: 4, row: 2, items: ["blue_buff", "rapid_firecannon"] },
+          { champId: "warwick", star: 2, col: 2, row: 2, items: ["bloodthirster", "runaans_hurricane"] },
+          { champId: "jhin", star: 2, col: 5, row: 0, items: ["infinity_edge", "last_whisper"] }
+        ]
+      };
+    } else {
+      // 몬스터 / 보스 크립 라운드
+      const hpScale = 4500 + (stageMajor - 6) * 1600;
+      const adScale = 120 + (stageMajor - 6) * 30;
+      return {
+        stage: `${stageMajor}-${stageMinor}`,
+        name: `에픽 보스 라운드: 협곡의 제왕`,
+        roundType: "boss",
+        typeIcon: "👾",
+        opponentName: `제왕 네베르 (스테이지 ${stageMajor})`,
+        opponentDesc: "막강한 에픽 보스 몬스터입니다. 처치 시 대량의 골드와 완성 아이템 전리품을 획득합니다.",
+        opponentSynergies: "보스 몬스터",
+        roundGold: 5,
+        rewardGold: 10 + (stageMajor - 6) * 2,
+        isPvP: false,
+        enemies: [
+          { name: "제왕 네베르", hp: hpScale, ad: adScale, as: 0.8, armor: 60, icon: "👾", image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/profileicon/1596.png", col: 3, row: 1 }
+        ]
+      };
+    }
+  }
+
+  // 10칸 아이템 인벤토리 렌더링 & 드래그 이벤트 설정
+  renderItemInventory() {
+    if (!this.dom.itemInventorySlots) return;
+    if (this.dom.inventoryCount) {
+      this.dom.inventoryCount.textContent = (this.player.itemInventory ? this.player.itemInventory.length : 0);
+    }
+
+    this.dom.itemInventorySlots.innerHTML = "";
+    for (let i = 0; i < 10; i++) {
+      const slot = document.createElement("div");
+      slot.className = "item-slot";
+      slot.dataset.slotIndex = i;
+
+      const itemId = this.player.itemInventory ? this.player.itemInventory[i] : null;
+      if (itemId && ITEMS[itemId]) {
+        const item = ITEMS[itemId];
+        const token = document.createElement("div");
+        token.className = "item-token";
+        token.textContent = item.icon;
+        token.title = `${item.name}\n${item.desc}`;
+        token.draggable = (this.phase === "planning");
+
+        // 드래그 시작 이벤트
+        token.addEventListener("dragstart", (e) => {
+          if (this.phase !== "planning") {
+            e.preventDefault();
+            return;
+          }
+          this.draggedItemInfo = { itemId, inventoryIndex: i };
+          token.classList.add("dragging");
+          e.dataTransfer.setData("text/plain", JSON.stringify(this.draggedItemInfo));
+          this.hideItemTooltip();
+        });
+
+        token.addEventListener("dragend", () => {
+          token.classList.remove("dragging");
+          this.draggedItemInfo = null;
+        });
+
+        // 툴팁 이벤트
+        token.addEventListener("mouseenter", (e) => this.showItemTooltip(item, e));
+        token.addEventListener("mousemove", (e) => this.moveItemTooltip(e));
+        token.addEventListener("mouseleave", () => this.hideItemTooltip());
+
+        slot.appendChild(token);
+      }
+
+      // 인벤토리 슬롯 간 조합 또는 위치 이동 드롭존
+      slot.addEventListener("dragover", (e) => {
+        if (!this.draggedItemInfo) return;
+        e.preventDefault();
+        slot.classList.add("drag-over");
+      });
+      slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
+      slot.addEventListener("drop", (e) => {
+        e.preventDefault();
+        slot.classList.remove("drag-over");
+        if (!this.draggedItemInfo) return;
+
+        const fromIdx = this.draggedItemInfo.inventoryIndex;
+        const toIdx = i;
+        if (fromIdx === toIdx) return;
+
+        const itemA = this.player.itemInventory[fromIdx];
+        const itemB = this.player.itemInventory[toIdx];
+
+        // 기본 아이템끼리 인벤토리 내에서 조합
+        if (itemA && itemB && ITEMS[itemA]?.isComponent && ITEMS[itemB]?.isComponent) {
+          const recipeKey = [itemA, itemB].sort().join("+");
+          const completedId = ITEM_RECIPES[recipeKey];
+          if (completedId) {
+            this.player.itemInventory[toIdx] = completedId;
+            this.player.itemInventory.splice(fromIdx, 1);
+            sound.playCombine(3);
+            this.showToastNotification(`✨ [${ITEMS[completedId].name}] 조합 완성!`, "success");
+            this.renderItemInventory();
+            return;
+          }
+        }
+
+        // 빈 슬롯으로 이동 또는 위치 스왑
+        if (toIdx < this.player.itemInventory.length) {
+          const temp = this.player.itemInventory[toIdx];
+          this.player.itemInventory[toIdx] = this.player.itemInventory[fromIdx];
+          this.player.itemInventory[fromIdx] = temp;
+        } else {
+          const item = this.player.itemInventory.splice(fromIdx, 1)[0];
+          this.player.itemInventory.push(item);
+        }
+        this.renderItemInventory();
+      });
+
+      this.dom.itemInventorySlots.appendChild(slot);
+    }
+  }
+
+  showItemTooltip(item, e) {
+    if (!this.dom.itemTooltip) return;
+    let recipeHtml = "";
+    if (item.isComponent) {
+      recipeHtml = `<div class="item-tooltip-recipe">기본 조합 아이템 (다른 기본 아이템과 조합 가능)</div>`;
+    } else if (item.recipe) {
+      const it1 = ITEMS[item.recipe[0]], it2 = ITEMS[item.recipe[1]];
+      recipeHtml = `<div class="item-tooltip-recipe">조합식: ${it1?.icon || ''} ${it1?.name || ''} + ${it2?.icon || ''} ${it2?.name || ''}</div>`;
+    }
+    this.dom.itemTooltip.innerHTML = `
+      <div class="item-tooltip-title">${item.icon} ${item.name}</div>
+      ${recipeHtml}
+      <div class="item-tooltip-desc">${item.desc}</div>
+    `;
+    this.dom.itemTooltip.style.display = "block";
+    this.moveItemTooltip(e);
+  }
+
+  moveItemTooltip(e) {
+    if (!this.dom.itemTooltip || this.dom.itemTooltip.style.display !== "block") return;
+    const x = e.clientX + 16;
+    const y = e.clientY + 16;
+    this.dom.itemTooltip.style.left = `${Math.min(window.innerWidth - 260, x)}px`;
+    this.dom.itemTooltip.style.top = `${Math.min(window.innerHeight - 150, y)}px`;
+  }
+
+  hideItemTooltip() {
+    if (this.dom.itemTooltip) {
+      this.dom.itemTooltip.style.display = "none";
+    }
+  }
+
+  canEquipItem(unit, itemId) {
+    if (!unit || unit.side !== "player") return false;
+    const item = ITEMS[itemId];
+    if (!item) return false;
+
+    // 도적의 장갑: 슬롯 3칸을 모두 차지하므로 유닛이 빈손(0개)이어야 함
+    if (item.isThiefsGloves) {
+      if (unit.items && unit.items.length > 0) {
+        this.showToastNotification("도적의 장갑은 다른 아이템이 없는 챔피언에게만 장착할 수 있습니다!", "warning");
+        return false;
+      }
+      return true;
+    }
+
+    // 이미 도적의 장갑을 낀 유닛에게는 더 이상 장착 불가
+    if (unit.items && unit.items.includes("thiefs_gloves")) {
+      this.showToastNotification("도적의 장갑을 장착한 챔피언에게는 다른 아이템을 줄 수 없습니다!", "warning");
+      return false;
+    }
+
+    // 상징 아이템: 해당 유닛이 이미 고유 특성으로 보유하고 있으면 장착 불가
+    if (item.grantTrait) {
+      if (unit.champ.traits.includes(item.grantTrait)) {
+        this.showToastNotification(`이 챔피언은 이미 [${TRAITS[item.grantTrait]?.name || item.grantTrait}] 특성을 보유하고 있어 상징을 장착할 수 없습니다!`, "warning");
+        return false;
+      }
+      if (unit.items && unit.items.some(id => ITEMS[id]?.grantTrait === item.grantTrait)) {
+        this.showToastNotification(`이미 동일한 상징 아이템을 장착하고 있습니다!`, "warning");
+        return false;
+      }
+    }
+
+    // 아이템이 3개인 경우: 기본 아이템 조합도 불가능하면 불가
+    if (unit.items && unit.items.length >= 3) {
+      if (item.isComponent) {
+        const compIdx = unit.items.findIndex(id => ITEMS[id]?.isComponent);
+        if (compIdx !== -1) {
+          const compItem = unit.items[compIdx];
+          const recKey = [compItem, itemId].sort().join("+");
+          const completedId = ITEM_RECIPES[recKey];
+          if (completedId) {
+            const completedItem = ITEMS[completedId];
+            if (completedItem?.grantTrait && unit.champ.traits.includes(completedItem.grantTrait)) {
+              this.showToastNotification(`조합되는 [${completedItem.name}] 상징 특성을 이미 보유하고 있습니다!`, "warning");
+              return false;
+            }
+            return true;
+          }
+        }
+      }
+      this.showToastNotification("이 챔피언은 이미 최대 개수(3개)의 아이템을 장착하고 있습니다!", "warning");
+      return false;
+    }
+
+    return true;
+  }
+
+  equipItemToUnit(arg1, arg2, fromInventoryIndex = -1) {
+    let unit, itemId;
+    if (typeof arg1 === "string") {
+      itemId = arg1;
+      unit = arg2;
+    } else {
+      unit = arg1;
+      itemId = arg2;
+    }
+    if (!this.canEquipItem(unit, itemId)) return false;
+
+    unit.items = unit.items || [];
+    const item = ITEMS[itemId];
+
+    // 기본 아이템끼리 자동 조합 확인
+    let combined = false;
+    if (item.isComponent) {
+      const compIdx = unit.items.findIndex(id => ITEMS[id]?.isComponent);
+      if (compIdx !== -1) {
+        const baseA = unit.items[compIdx];
+        const recKey = [baseA, itemId].sort().join("+");
+        const completedId = ITEM_RECIPES[recKey];
+        if (completedId) {
+          const completedItem = ITEMS[completedId];
+          if (completedItem?.grantTrait && unit.champ.traits.includes(completedItem.grantTrait)) {
+            this.showToastNotification(`조합되는 [${completedItem.name}] 상징 특성을 이미 보유하고 있습니다!`, "warning");
+            return false;
+          }
+          unit.items[compIdx] = completedId;
+          combined = true;
+          sound.playCombine(3);
+          this.showToastNotification(`✨ [${completedItem.name}] 조합 완성!`, "success");
+        }
+      }
+    }
+
+    if (!combined) {
+      unit.items.push(itemId);
+      sound.playBuy();
+      this.showToastNotification(`🛡️ ${unit.champ.name}에게 [${item.name}] 장착 완료!`, "info");
+    }
+
+    // 인벤토리에서 제거
+    if (fromInventoryIndex >= 0 && fromInventoryIndex < this.player.itemInventory.length) {
+      this.player.itemInventory.splice(fromInventoryIndex, 1);
+    } else {
+      const idx = this.player.itemInventory.indexOf(itemId);
+      if (idx !== -1) this.player.itemInventory.splice(idx, 1);
+    }
+
+    this.renderItemInventory();
+    this.renderUnits();
+    this.updateSynergies();
+    this.updateHUD();
+    return true;
   }
 
   // 기물 배치/이동 중에만 전장 육각 격자를 점등 (평소엔 성소 석조 바닥 노출)
@@ -321,13 +679,14 @@ class TFTGame {
     this.buildBoardGrid();
     this.buildBenchGrid();
 
-    this.previewEnemyUnits(ROUNDS[this.roundIdx]);
+    this.previewEnemyUnits(this.getRoundInfo(this.roundIdx));
     this.refreshShop(true);
     this.updateHUD();
     this.updateSynergies();
     this.updateScoreboardUI();
     this.updateScoutBanner();
     this.renderUnits();
+    this.renderItemInventory();
     this.fitBoardToScreen();
 
     // BGM은 기본 항상 ON (볼륨 0 = 꺼짐)
@@ -409,6 +768,12 @@ class TFTGame {
     });
 
     grid.addEventListener("dragover", (e) => {
+      if (this.draggedItemInfo) {
+        e.preventDefault();
+        const cell = this.resolvePlayerCell(e);
+        this.setDragOver(cell);
+        return;
+      }
       if (this.phase !== "planning" || !this.draggedUnit || (this.scoutedPlayerId && this.scoutedPlayerId !== "player")) return;
       const cell = this.resolvePlayerCell(e);
       this.setDragOver(cell);
@@ -424,6 +789,15 @@ class TFTGame {
       this.setDragOver(null);
       if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") return;
       const cell = this.resolvePlayerCell(e);
+      if (this.draggedItemInfo && cell) {
+        const r = +cell.dataset.row, c = +cell.dataset.col;
+        const targetUnit = this.board[r] ? this.board[r][c] : null;
+        if (targetUnit && targetUnit.side === "player") {
+          this.equipItemToUnit(targetUnit, this.draggedItemInfo.itemId, this.draggedItemInfo.inventoryIndex);
+        }
+        this.draggedItemInfo = null;
+        return;
+      }
       if (cell && this.draggedUnit && this.dragSource) {
         this.executeMoveToBoard(this.draggedUnit, this.dragSource, +cell.dataset.row, +cell.dataset.col);
       }
@@ -513,6 +887,11 @@ class TFTGame {
       }
     });
     bench.addEventListener("dragover", (e) => {
+      if (this.draggedItemInfo) {
+        e.preventDefault();
+        this.setDragOver(resolve(e));
+        return;
+      }
       if (this.phase !== "planning" || !this.draggedUnit || (this.scoutedPlayerId && this.scoutedPlayerId !== "player")) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
@@ -526,6 +905,15 @@ class TFTGame {
       this.setDragOver(null);
       if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") return;
       const cell = resolve(e);
+      if (this.draggedItemInfo && cell) {
+        const idx = +cell.dataset.benchIndex;
+        const targetUnit = this.bench[idx];
+        if (targetUnit && targetUnit.side === "player") {
+          this.equipItemToUnit(targetUnit, this.draggedItemInfo.itemId, this.draggedItemInfo.inventoryIndex);
+        }
+        this.draggedItemInfo = null;
+        return;
+      }
       if (cell && this.draggedUnit && this.dragSource) {
         this.executeMoveToBench(this.draggedUnit, this.dragSource, +cell.dataset.benchIndex);
       }
@@ -947,7 +1335,7 @@ class TFTGame {
     return refs;
   }
 
-  // 챔피언 3개 모이면 자동 합성 (필드 유닛 우선 유지, 선택받은 자 속성 보존)
+  // 챔피언 3개 모이면 자동 합성 (필드 유닛 우선 유지, 선택받은 자 속성 보존, 아이템 병합 및 초과분 인벤토리 회수)
   checkChampionCombinations() {
     const allUnits = this.getAllPlayerUnitRefs();
     if (this.pendingBuyUnit) allUnits.push({ unit: this.pendingBuyUnit, loc: 'pending' });
@@ -968,6 +1356,16 @@ class TFTGame {
       const chosenItem = trio.find(it => it.unit.isChosen);
       const placed = trio.find(it => it.loc !== 'pending');
       const main = chosenItem || placed;
+
+      // 3개 유닛의 아이템 모두 수집
+      let collectedItems = [];
+      trio.forEach(it => {
+        if (it.unit.items && it.unit.items.length > 0) {
+          collectedItems.push(...it.unit.items);
+          it.unit.items = [];
+        }
+      });
+
       trio.forEach(it => { if (it !== main) this.removeUnitFromSource(it); });
 
       if (main.loc === 'pending') {
@@ -980,6 +1378,39 @@ class TFTGame {
       applyStarStats(main.unit);
       main.unit.mana = main.unit.champ.startMana;
       main.unit.isNewBuy = true;
+
+      // 수집된 아이템 재장착 (최대 3개, 기본 아이템끼리는 자동 조합, 3개 초과분은 인벤토리로 회수)
+      main.unit.items = [];
+      for (const itId of collectedItems) {
+        if (main.unit.items.length < 3) {
+          // 기본 아이템인지 확인하고 기존 기본템과 조합 시도
+          const isBase = BASE_ITEMS.some(b => b.id === itId);
+          let combined = false;
+          if (isBase) {
+            const baseIdx = main.unit.items.findIndex(existingId => BASE_ITEMS.some(b => b.id === existingId));
+            if (baseIdx !== -1) {
+              const prevBase = main.unit.items[baseIdx];
+              const recipeKey1 = `${prevBase}+${itId}`;
+              const recipeKey2 = `${itId}+${prevBase}`;
+              const completedId = ITEM_RECIPES[recipeKey1] || ITEM_RECIPES[recipeKey2];
+              if (completedId) {
+                main.unit.items[baseIdx] = completedId;
+                combined = true;
+              }
+            }
+          }
+          if (!combined) {
+            main.unit.items.push(itId);
+          }
+        } else {
+          // 초과분 인벤토리로 회수 (최대 10개)
+          if (!this.player.itemInventory) this.player.itemInventory = [];
+          if (this.player.itemInventory.length < 10) {
+            this.player.itemInventory.push(itId);
+          }
+        }
+      }
+      this.renderItemInventory();
 
       sound.playCombine(main.unit.star);
       this.showToastNotification(`${main.unit.champ.name} ${STAR_TEXT[main.unit.star]} 합성 완료!`, "success");
@@ -1055,6 +1486,18 @@ class TFTGame {
 
   sellUnit(unit) {
     if (!unit || this.phase !== "planning" || unit.side !== "player") return;
+
+    // 아이템 회수 공간 체크 (인벤토리 최대 10개)
+    const unitItemsCount = (unit.items && unit.items.length) || 0;
+    if (unitItemsCount > 0) {
+      if (!this.player.itemInventory) this.player.itemInventory = [];
+      if (this.player.itemInventory.length + unitItemsCount > 10) {
+        this.showToastNotification("아이템 보관함(최대 10개)이 가득 차서 판매할 수 없습니다! 아이템을 먼저 사용하세요.", "error");
+        sound.playDefeat();
+        return;
+      }
+    }
+
     const refund = this.getUnitSellPrice(unit);
 
     // 벤치 또는 필드에서 찾아서 제거
@@ -1084,6 +1527,13 @@ class TFTGame {
         this.player.chosenChamp = null;
       }
       this.player.gold += refund;
+
+      // 장착 아이템 인벤토리로 회수
+      if (unit.items && unit.items.length > 0) {
+        this.player.itemInventory.push(...unit.items);
+        unit.items = [];
+        this.renderItemInventory();
+      }
 
       // 선택 상태 및 호버 상태 완전 해제 (버그 방지: 유닛 부활 방지)
       if (this.selectedUnitInfo && this.selectedUnitInfo.unit.uid === unit.uid) {
@@ -1117,10 +1567,11 @@ class TFTGame {
       return;
     }
 
-    // 벤치에서 빈 자리로 이동할 때만 인원수 제한 체크 (스왑은 인원수 변화 없음)
+    // 벤치에서 빈 자리로 이동할 때만 인원수 제한 체크 (자연의 힘 반영 getMaxTeamSize)
     const currentBoardUnits = this.getBoardUnits("player").length;
-    if (source.type === "bench" && !existingUnit && currentBoardUnits >= this.player.level) {
-      this.showToastNotification(`현재 레벨(${this.player.level})에서는 최대 ${this.player.level}명까지만 배치할 수 있습니다! [F키로 레벨업]`);
+    const maxTeamSize = this.getMaxTeamSize();
+    if (source.type === "bench" && !existingUnit && currentBoardUnits >= maxTeamSize) {
+      this.showToastNotification(`현재 최대 배치 가능 인원(${maxTeamSize}명)을 초과할 수 없습니다! [F키로 레벨업]`);
       sound.playDefeat();
       return;
     }
@@ -1262,7 +1713,7 @@ class TFTGame {
 
     const counts = countTraits(units);
     const placed = units.length;
-    const maxUnits = isScouting ? (currentOpp ? currentOpp.level : 5) : this.player.level;
+    const maxUnits = isScouting ? (currentOpp ? currentOpp.level : 5) : this.getMaxTeamSize();
 
     if (!isScouting) {
       if (this.dom.deployCount) {
@@ -1379,7 +1830,7 @@ class TFTGame {
   // 현재 라운드 매칭된 AI 상대 정보 조회
   getCurrentRoundOpponent() {
     if (!this.lobbyOpponents) return null;
-    const round = ROUNDS[this.roundIdx];
+    const round = this.getRoundInfo(this.roundIdx);
     if (!round || !round.isPvP) return null;
     if (round.opponentId) {
       const match = this.lobbyOpponents.find(o => o.id === round.opponentId);
@@ -1566,17 +2017,46 @@ class TFTGame {
       }
     });
 
+    // 아이템을 유닛 토큰 위로 직접 드래그앤드롭하여 장착
+    token.addEventListener("dragover", (e) => {
+      if (this.draggedItemInfo && unit.side === "player") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      }
+    });
+    token.addEventListener("drop", (e) => {
+      if (this.draggedItemInfo && unit.side === "player") {
+        e.preventDefault();
+        e.stopPropagation();
+        const { itemId, slotIdx } = this.draggedItemInfo;
+        this.equipItemToUnit(itemId, unit, slotIdx);
+        this.draggedItemInfo = null;
+      }
+    });
+
     return token;
   }
 
-  // 유닛 툴팁 (스킬 설명 포함)
+  // 유닛 툴팁 (스킬 설명 및 장착 아이템 효과 포함)
   describeUnit(unit) {
     const c = unit.champ;
     const traits = c.traits.map(t => TRAITS[t] ? TRAITS[t].name + (unit.isChosen && unit.chosenTrait === t ? '(x2)' : '') : t).join(", ");
-    return `${c.name} ${STAR_TEXT[unit.star] || ''}${unit.isChosen ? ' [선택받은 자]' : ''}\n` +
+    let text = `${c.name} ${STAR_TEXT[unit.star] || ''}${unit.isChosen ? ' [선택받은 자]' : ''}\n` +
       `체력 ${unit.maxHp} · 공격력 ${unit.ad} · 공속 ${c.as} · 사거리 ${c.range || 1}\n` +
       (traits ? `특성: ${traits}\n` : '') +
-      (c.skillName ? `스킬 - ${c.skillName}: ${c.skillDesc}` : '');
+      (c.skillName ? `스킬 - ${c.skillName}: ${c.skillDesc}\n` : '');
+
+    if (unit.items && unit.items.length > 0) {
+      text += `\n[장착 아이템 (${unit.items.length}/3)]\n`;
+      unit.items.forEach(itId => {
+        const it = ITEMS[itId];
+        if (it) {
+          text += `• ${it.icon} ${it.name}: ${it.desc}\n`;
+        }
+      });
+    }
+    return text.trim();
   }
 
   setCombatButtonState(isCombat) {
@@ -1602,21 +2082,34 @@ class TFTGame {
   // 상단 STAGE 그래픽 타임라인 렌더링 (TFT 공식 롤토체스 아이콘 라운드 트래커)
   renderStageTimeline() {
     if (!this.dom.stageTimeline) return;
-    const currentRound = ROUNDS[this.roundIdx];
+    const currentRound = this.getRoundInfo(this.roundIdx);
     if (!currentRound) return;
 
     // 현재 스테이지 (예: "1-2" -> stagePrefix "1")
     const stagePrefix = String(currentRound.stage || "1").split("-")[0];
 
-    // 현재 스테이지에 속하는 모든 라운드
-    const stageRounds = ROUNDS.filter(r => String(r.stage).split("-")[0] === stagePrefix);
+    // 현재 스테이지에 속하는 라운드 목록 생성 (일반화: getRoundInfo 기반)
+    let stageRounds = [];
+    if (this.roundIdx < ROUNDS.length) {
+      stageRounds = ROUNDS.filter(r => String(r.stage).split("-")[0] === stagePrefix);
+    } else {
+      // 6스테이지 이후: 4개 라운드 (x-1, x-2, x-3, x-4)
+      const stageNum = parseInt(stagePrefix, 10);
+      const stageStartIdx = 13 + (stageNum - 6) * 4;
+      for (let i = 0; i < 4; i++) {
+        stageRounds.push(this.getRoundInfo(stageStartIdx + i));
+      }
+    }
 
     this.dom.stageTimeline.innerHTML = "";
     stageRounds.forEach(r => {
       const node = document.createElement("div");
       node.className = "round-node";
 
-      const rIdx = ROUNDS.findIndex(item => item.stage === r.stage);
+      const rIdx = (this.roundIdx < ROUNDS.length)
+        ? ROUNDS.findIndex(item => item.stage === r.stage)
+        : (13 + (parseInt(stagePrefix, 10) - 6) * 4 + parseInt(String(r.stage).split("-")[1], 10) - 1);
+
       if (rIdx < this.roundIdx) {
         node.classList.add("completed");
       } else if (rIdx === this.roundIdx) {
@@ -1633,7 +2126,7 @@ class TFTGame {
   }
 
   updateHUD() {
-    const currentRound = ROUNDS[this.roundIdx] || { stage: "완료", name: "최종전 승리!" };
+    const currentRound = this.getRoundInfo(this.roundIdx) || { stage: "완료", name: "최종전 승리!" };
     if (this.dom.stageNumber) this.dom.stageNumber.textContent = currentRound.stage;
 
     if (this.dom.playerHpText) this.dom.playerHpText.textContent = `${this.player.hp} HP`;
@@ -1671,7 +2164,7 @@ class TFTGame {
     }
 
     const placed = this.getBoardUnits("player").length;
-    const maxUnits = this.player.level;
+    const maxUnits = this.getMaxTeamSize();
     if (this.dom.deployCount) this.dom.deployCount.textContent = `${placed} / ${maxUnits}`;
     if (this.dom.deployChip) {
       this.dom.deployChip.classList.toggle("full", placed === maxUnits);
@@ -1711,7 +2204,7 @@ class TFTGame {
   autoDeployFromBench() {
     let boardUnits = this.getBoardUnits("player");
     let boardCount = boardUnits.length;
-    const maxUnits = this.player.level;
+    const maxUnits = this.getMaxTeamSize();
     if (boardCount >= maxUnits) return 0;
 
     let deployed = 0;
@@ -1761,9 +2254,10 @@ class TFTGame {
     }
 
     let playerUnits = this.getBoardUnits("player");
+    const maxUnits = this.getMaxTeamSize();
 
-    // 기물이 레벨보다 적은 경우: 벤치 가장 왼쪽 기물부터 무작위 빈 칸에 자동 배치 후 시작
-    if (playerUnits.length < this.player.level) {
+    // 기물이 최대 배치 가능 인원보다 적은 경우: 벤치 가장 왼쪽 기물부터 무작위 빈 칸에 자동 배치 후 시작
+    if (playerUnits.length < maxUnits) {
       const deployed = this.autoDeployFromBench();
       if (deployed > 0) {
         playerUnits = this.getBoardUnits("player");
@@ -1774,9 +2268,9 @@ class TFTGame {
       }
     }
 
-    // 2. 배치 인원 초과 체크 (레벨보다 많이 올려둔 경우)
-    if (playerUnits.length > this.player.level) {
-      this.showToastNotification(`배치 인원 초과! 현재 레벨에서는 ${this.player.level}명까지만 출전할 수 있습니다.`);
+    // 2. 배치 인원 초과 체크
+    if (playerUnits.length > maxUnits) {
+      this.showToastNotification(`배치 인원 초과! 현재는 최대 ${maxUnits}명까지만 출전할 수 있습니다.`);
       return;
     }
 
@@ -1788,7 +2282,8 @@ class TFTGame {
     this.updateHUD();
 
     // 1. 적 기물 스폰 (스카우팅용으로 배치된 상대를 새 체력으로 다시 배치)
-    this.spawnEnemyUnits(ROUNDS[this.roundIdx]);
+    const currentRound = this.getRoundInfo(this.roundIdx);
+    this.spawnEnemyUnits(currentRound);
 
     // 2. 전투 시뮬레이션 인스턴스 생성
     this.initBattleInstance();
@@ -1815,7 +2310,8 @@ class TFTGame {
         avatar: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/profileicon/588.png",
         winStreak: 0,
         lossStreak: 0,
-        isAlive: true
+        isAlive: true,
+        placement: null
       },
       {
         id: "opp_sett",
@@ -1828,6 +2324,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1842,6 +2339,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1856,6 +2354,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1870,6 +2369,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1884,6 +2384,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1898,6 +2399,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       },
@@ -1912,6 +2414,7 @@ class TFTGame {
         winStreak: 0,
         lossStreak: 0,
         isAlive: true,
+        placement: null,
         board: [],
         bench: []
       }
@@ -1921,10 +2424,21 @@ class TFTGame {
     this.syncLobbyOpponentsGrowth();
   }
 
-  // 플레이어의 레벨 업 및 라운드 성장에 맞춰 8인 로비 AI들의 레벨 및 덱을 동적 성장시킴
+  // 플레이어의 레벨 업 및 라운드 성장에 맞춰 8인 로비 AI들의 레벨 및 덱/아이템을 동적 성장시킴
   syncLobbyOpponentsGrowth() {
     if (!this.lobbyOpponents) return;
     const currentLvl = Math.max(1, Math.min(9, (this.player ? this.player.level : 1)));
+    const currentRound = this.getRoundInfo(this.roundIdx);
+    const stageNum = parseInt(String(currentRound?.stage || "1").split("-")[0], 10) || 1;
+
+    // AI 기물에게 분배할 추천 완성 아이템 풀
+    const botItemPool = [
+      'deathblade', 'giant_slayer', 'hextech_gunblade', 'spear_of_shojin', 'guardian_angel',
+      'bloodthirster', 'infinity_edge', 'rapid_firecannon', 'guinsoos_rageblade', 'statikk_shiv',
+      'titans_resolve', 'rabadons_deathcap', 'jeweled_gauntlet', 'morellonomicon', 'blue_buff',
+      'bramble_vest', 'gargoyle_stoneplate', 'sunfire_cape', 'dragons_claw', 'warmogs_armor',
+      'hand_of_justice', 'quicksilver'
+    ];
 
     this.lobbyOpponents.forEach(p => {
       if (p.isPlayer) {
@@ -1944,6 +2458,20 @@ class TFTGame {
         if (comp) {
           p.board = comp.board ? JSON.parse(JSON.stringify(comp.board)) : [];
           p.bench = comp.bench ? JSON.parse(JSON.stringify(comp.bench)) : [];
+
+          // 스테이지에 따라 봇 기물에 아이템 장착 (스테이지 2: 1개, 3: 2~3개, 4: 4~5개, 5+: 6개)
+          if (stageNum >= 2 && p.board.length > 0) {
+            const numItemsToGive = Math.min(p.board.length * 3, (stageNum - 1) * 2);
+            let itemSeed = (p.name.charCodeAt(0) + stageNum * 7);
+            for (let i = 0; i < numItemsToGive; i++) {
+              const uIdx = i % p.board.length;
+              if (!p.board[uIdx].items) p.board[uIdx].items = [];
+              if (p.board[uIdx].items.length < 3) {
+                const pickItem = botItemPool[(itemSeed + i * 3) % botItemPool.length];
+                p.board[uIdx].items.push(pickItem);
+              }
+            }
+          }
         }
       }
     });
@@ -1992,7 +2520,7 @@ class TFTGame {
     }
   }
 
-  // 8인 로비 순위표 UI 갱신 (체력순 정렬, 탈락자 처리)
+  // 8인 로비 순위표 UI 갱신 (체력순 정렬, 탈락자 및 등수 표시)
   updateScoreboardUI() {
     if (!this.dom.scoreboardList) return;
 
@@ -2006,11 +2534,12 @@ class TFTGame {
       playerEntry.lossStreak = this.player.lossStreak;
     }
 
-    // 생존자(체력 내림차순) 우선, 탈락자는 최하단 정렬
+    // 생존자는 체력 내림차순, 탈락자는 등수(placement) 오름차순(예: 5등 -> 6등 -> 7등 -> 8등)
     const sorted = [...this.lobbyOpponents].sort((a, b) => {
       if (a.isAlive && !b.isAlive) return -1;
       if (!a.isAlive && b.isAlive) return 1;
-      return b.hp - a.hp;
+      if (a.isAlive && b.isAlive) return b.hp - a.hp;
+      return (a.placement || 8) - (b.placement || 8);
     });
 
     this.dom.scoreboardList.innerHTML = "";
@@ -2019,13 +2548,14 @@ class TFTGame {
       const item = document.createElement("div");
       item.className = `scoreboard-orb-item ${isCurrent ? 'active' : ''} ${!p.isAlive ? 'eliminated' : ''}`;
       item.dataset.playerId = p.id;
-      item.title = `${p.name} (Lv.${p.level || 1}) · 체력: ${p.hp} HP - 클릭하여 결투장 정찰`;
+      item.title = `${p.name} (Lv.${p.level || 1}) · 체력: ${p.hp} HP ${p.placement ? `[최종 ${p.placement}등]` : ''} - 클릭하여 결투장 정찰`;
 
       const hpStatusClass = p.hp <= 25 ? 'critical' : (p.hp <= 50 ? 'warning' : 'healthy');
+      const badgeText = p.isAlive ? p.hp : (p.placement ? `${p.placement}등` : '탈락');
 
       item.innerHTML = `
         <div class="orb-hp-badge ${hpStatusClass} ${!p.isAlive ? 'dead' : ''}">
-          ${p.isAlive ? p.hp : '0'}
+          ${badgeText}
         </div>
         <div class="orb-avatar-box">
           <img class="orb-avatar-img" src="${p.avatar}" alt="${p.name}" onerror="this.src='https://ddragon.leagueoflegends.com/cdn/13.24.1/img/profileicon/588.png'">
@@ -2044,44 +2574,76 @@ class TFTGame {
     });
   }
 
-  // 라운드 종료 시 로비 AI 플레이어들 간의 전투 피해 시뮬레이션
+  // 라운드 종료 시 로비 AI 플레이어들 간의 전투 피해 시뮬레이션 및 탈락 순위 결정
   simulateLobbyDamage(currentPvPOpp = null, playerWon = false, pvpDamage = 0, stageNum = null) {
     if (stageNum === null) {
-      const stageStr = String(ROUNDS[this.roundIdx]?.stage || "1").split("-")[0];
+      const stageStr = String(this.getRoundInfo(this.roundIdx)?.stage || "1").split("-")[0];
       stageNum = parseInt(stageStr, 10) || 1;
     }
-    if (stageNum <= 1) return; // 미니언 크립 라운드는 데미지 없음
+    if (stageNum <= 1) return; // 미니언 크립 라운드는 피해 없음
 
-    this.lobbyOpponents.forEach(p => {
-      if (p.isPlayer || !p.isAlive) return;
-
-      // 이번 라운드에 플레이어와 직접 PvP를 진행한 상대
-      if (currentPvPOpp && p.id === currentPvPOpp.id) {
-        if (playerWon) {
-          const dmg = pvpDamage > 0 ? pvpDamage : ((stageNum * 4) + Math.floor(Math.random() * 6));
-          p.hp = Math.max(0, p.hp - dmg);
-          if (p.hp === 0) p.isAlive = false;
-          p.lossStreak++;
-          p.winStreak = 0;
-        } else {
-          p.winStreak++;
-          p.lossStreak = 0;
-        }
-        return;
-      }
-
-      // 나머지 AI 상대들 간의 시뮬레이션: 55% 확률로 패배하여 체력 차감
-      if (Math.random() < 0.55) {
-        const dmg = (stageNum * 4) + Math.floor(Math.random() * 6);
-        p.hp = Math.max(0, p.hp - dmg);
-        if (p.hp === 0) p.isAlive = false;
-        p.lossStreak++;
-        p.winStreak = 0;
+    // 1. 이번 라운드 플레이어와 직접 PvP를 치른 상대 피해 적용
+    if (currentPvPOpp && currentPvPOpp.isAlive) {
+      if (playerWon) {
+        const dmg = pvpDamage > 0 ? pvpDamage : ((stageNum * 4) + Math.floor(Math.random() * 6));
+        currentPvPOpp.hp = Math.max(0, currentPvPOpp.hp - dmg);
+        currentPvPOpp.lossStreak++;
+        currentPvPOpp.winStreak = 0;
       } else {
-        p.winStreak++;
-        p.lossStreak = 0;
+        currentPvPOpp.winStreak++;
+        currentPvPOpp.lossStreak = 0;
       }
-    });
+    }
+
+    // 2. 나머지 생존 AI들 페어링 대결 시뮬레이션
+    const otherAliveBots = this.lobbyOpponents.filter(p => !p.isPlayer && p.isAlive && (!currentPvPOpp || p.id !== currentPvPOpp.id));
+    // 셔플
+    for (let i = otherAliveBots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [otherAliveBots[i], otherAliveBots[j]] = [otherAliveBots[j], otherAliveBots[i]];
+    }
+
+    for (let i = 0; i < otherAliveBots.length; i += 2) {
+      const botA = otherAliveBots[i];
+      const botB = otherAliveBots[i + 1]; // 홀수일 경우 botB는 undefined (유령 상대)
+      if (botB) {
+        // 전력(레벨 및 덱 기물 수) 기반 승패 확률
+        const powerA = (botA.level || 5) * 10 + (botA.board ? botA.board.length * 5 : 0) + Math.random() * 20;
+        const powerB = (botB.level || 5) * 10 + (botB.board ? botB.board.length * 5 : 0) + Math.random() * 20;
+        const loser = (powerA >= powerB) ? botB : botA;
+        const winner = (powerA >= powerB) ? botA : botB;
+        const dmg = (stageNum * 4) + Math.floor(Math.random() * 6);
+        loser.hp = Math.max(0, loser.hp - dmg);
+        loser.lossStreak++;
+        loser.winStreak = 0;
+        winner.winStreak++;
+        winner.lossStreak = 0;
+      } else {
+        // 유령 상대 대결: 60% 확률로 승리
+        if (Math.random() < 0.4) {
+          const dmg = (stageNum * 3) + Math.floor(Math.random() * 5);
+          botA.hp = Math.max(0, botA.hp - dmg);
+          botA.lossStreak++;
+          botA.winStreak = 0;
+        } else {
+          botA.winStreak++;
+          botA.lossStreak = 0;
+        }
+      }
+    }
+
+    // 3. 탈락자 처리 및 등수(placement) 매기기 (AI 봇 대상, 플레이어는 endCombat에서 단독 처리)
+    const justDied = this.lobbyOpponents.filter(p => !p.isPlayer && p.hp <= 0 && p.isAlive);
+    if (justDied.length > 0) {
+      // 체력이 덜 깎인 순(가장 0에 가까운 순)으로 더 높은 등수
+      justDied.sort((a, b) => b.hp - a.hp);
+      justDied.forEach((p) => {
+        p.isAlive = false;
+        const remainingAlive = this.lobbyOpponents.filter(o => o.isAlive).length;
+        p.placement = Math.max(1, Math.min(8, remainingAlive + 1));
+      });
+    }
+
     this.updateScoreboardUI();
   }
 
@@ -2095,10 +2657,19 @@ class TFTGame {
     if (!roundInfo) return;
 
     if (roundInfo.isPvP) {
-      roundInfo.enemies.forEach(e => {
+      // 실제 매칭된 AI 상대의 현재 보드 기물이 있다면 우선 배치, 없으면 roundInfo.enemies 사용
+      let enemiesToSpawn = roundInfo.enemies || [];
+      if (roundInfo.opponentId) {
+        const opp = this.lobbyOpponents.find(o => o.id === roundInfo.opponentId);
+        if (opp && opp.board && opp.board.length > 0) {
+          enemiesToSpawn = opp.board;
+        }
+      }
+      enemiesToSpawn.forEach(e => {
         const base = CHAMPIONS.find(c => c.id === e.champId);
         if (!base) return;
-        this.board[e.row][e.col] = makeUnit(base, e.star || 1, "enemy");
+        const unit = makeUnit(base, e.star || 1, "enemy", e.items || []);
+        this.board[e.row][e.col] = unit;
       });
     } else {
       // 크립/몬스터 라운드
@@ -2125,7 +2696,7 @@ class TFTGame {
             battle.dealDamage(caster, target, caster.ad * 1.5, "physical");
           }
         };
-        const unit = makeUnit(champ, 1, "enemy");
+        const unit = makeUnit(champ, 1, "enemy", m.items || []);
         unit.uid = makeUid('monster');
         this.board[m.row][m.col] = unit;
       });
@@ -2166,17 +2737,199 @@ class TFTGame {
 
   createBattleUnit(u, r, c, geo) {
     const p = geo.centers[r][c];
+
+    // 도적의 장갑(thiefs_gloves) 처리: 매 전투마다 무작위 완성 아이템 2개 롤
+    let effectiveItems = [...(u.items || [])];
+    const isTG = effectiveItems.includes('thiefs_gloves') || effectiveItems.includes('thieves_gloves');
+    if (isTG) {
+      const candidates = CRAFTABLE_ITEMS.filter(id => id !== 'thiefs_gloves' && id !== 'thieves_gloves');
+      const pick1 = candidates[Math.floor(Math.random() * candidates.length)];
+      let pick2 = candidates[Math.floor(Math.random() * candidates.length)];
+      if (pick1 === pick2 && candidates.length > 1) {
+        pick2 = candidates[(candidates.indexOf(pick1) + 1) % candidates.length];
+      }
+      effectiveItems = ['thiefs_gloves', pick1, pick2];
+    }
+
+    // 아이템 스탯 합산
+    let bonusAd = 0;
+    let bonusAsPct = 0;
+    let bonusAp = 0;
+    let bonusHp = 0;
+    let bonusArmor = 0;
+    let bonusMr = 0;
+    let bonusMana = 0;
+    let critChance = 0.25; // 기본 치명타 확률 25%
+    let critDamage = 1.50; // 기본 치명타 피해량 150%
+    let dodge = 0;         // 기본 회피 확률
+    let lifesteal = 0;
+    let omnivamp = 0;
+    let spellCrit = false;
+    let manaOnHit = 0;
+    let deathbladeStacks = 0;
+    let titanStacks = 0;
+    let hasWarmogs = false;
+    let hasBlueBuff = false;
+    let hasShojin = false;
+    let hasRageblade = false;
+    let hasStatikk = false;
+    let hasRunaan = false;
+    let hasGiantSlayer = false;
+    let hasBrambleVest = false;
+    let hasDragonsClaw = false;
+    let hasSunfire = false;
+    let hasMorello = false;
+    let hasLuden = false;
+    let hasIonic = false;
+    let hasTrapClaw = false;
+    let hasGA = false;
+    let hasZzrot = false;
+    let hasLastWhisper = false;
+    let hasGunblade = false;
+    let hasBloodthirster = false;
+    let hasHoj = false;
+
+    effectiveItems.forEach(itId => {
+      const itemData = ITEMS[itId];
+      if (!itemData || !itemData.stats) return;
+      const s = itemData.stats;
+      if (s.ad) bonusAd += s.ad;
+      if (s.as) bonusAsPct += s.as;
+      if (s.ap) bonusAp += s.ap;
+      if (s.hp) bonusHp += s.hp;
+      if (s.armor) bonusArmor += s.armor;
+      if (s.mr) bonusMr += s.mr;
+      if (s.mana) bonusMana += s.mana;
+      if (s.critChance) critChance += s.critChance;
+      if (s.dodge) dodge += s.dodge;
+      if (s.lifesteal) lifesteal += s.lifesteal;
+
+      // 완성 아이템 고유 효과 플래그
+      if (itId === 'infinity_edge') {
+        // 인피: 치명타 확률 100% 초과 시 초과분의 50%만큼 치명타 피해량 전환
+      } else if (itId === 'jeweled_gauntlet') {
+        spellCrit = true;
+      } else if (itId === 'deathblade') {
+        deathbladeStacks = 1; // 기본 1스택 시작
+      } else if (itId === 'titans_resolve') {
+        titanStacks = 0;
+      } else if (itId === 'warmogs_armor') {
+        hasWarmogs = true;
+        bonusHp += 1000;
+      } else if (itId === 'blue_buff') {
+        hasBlueBuff = true;
+      } else if (itId === 'spear_of_shojin') {
+        hasShojin = true;
+        manaOnHit += 5;
+      } else if (itId === 'guinsoos_rageblade') {
+        hasRageblade = true;
+      } else if (itId === 'statikk_shiv') {
+        hasStatikk = true;
+      } else if (itId === 'runaans_hurricane') {
+        hasRunaan = true;
+      } else if (itId === 'giant_slayer') {
+        hasGiantSlayer = true;
+      } else if (itId === 'bramble_vest') {
+        hasBrambleVest = true;
+      } else if (itId === 'dragons_claw') {
+        hasDragonsClaw = true;
+      } else if (itId === 'sunfire_cape') {
+        hasSunfire = true;
+      } else if (itId === 'morellonomicon') {
+        hasMorello = true;
+      } else if (itId === 'ludens_echo') {
+        hasLuden = true;
+      } else if (itId === 'ionic_spark') {
+        hasIonic = true;
+      } else if (itId === 'trap_claw') {
+        hasTrapClaw = true;
+      } else if (itId === 'guardian_angel') {
+        hasGA = true;
+      } else if (itId === 'zzrot_portal') {
+        hasZzrot = true;
+      } else if (itId === 'last_whisper') {
+        hasLastWhisper = true;
+      } else if (itId === 'hextech_gunblade') {
+        hasGunblade = true;
+        omnivamp += 0.33;
+      } else if (itId === 'bloodthirster') {
+        hasBloodthirster = true;
+        lifesteal += 0.40;
+      } else if (itId === 'hand_of_justice') {
+        hasHoj = true;
+        if (Math.random() < 0.5) {
+          bonusAd += 45;
+          bonusAp += 45;
+        } else {
+          omnivamp += 0.45;
+        }
+      }
+    });
+
+    // 인피 치명타 초과분 피해량 전환
+    if (effectiveItems.includes('infinity_edge')) {
+      if (critChance > 1.0) {
+        critDamage += (critChance - 1.0) * 0.5;
+        critChance = 1.0;
+      }
+    }
+
+    const calculatedMaxHp = Math.round(u.maxHp + bonusHp);
+    const calculatedAd = Math.round(u.ad + bonusAd + (deathbladeStacks * 20));
+    const calculatedBaseAs = u.champ.as;
+    const calculatedAs = Math.min(5.0, calculatedBaseAs * (1 + bonusAsPct));
+
     return {
       ...u,                    // 원본 유닛 필드 얕은 복사 (champ 함수 참조 유지)
       champ: u.champ,
-      hp: u.maxHp,
-      mana: u.champ.startMana,
+      items: effectiveItems,
+      maxHp: calculatedMaxHp,
+      hp: calculatedMaxHp,
+      mana: Math.min(u.champ.maxMana || 100, (u.champ.startMana || 0) + bonusMana),
+      maxMana: u.champ.maxMana || 100,
       shield: 0,
-      as: u.champ.as,
-      baseAs: u.champ.as,
-      armor: u.champ.armor || 20,
-      mr: u.champ.mr != null ? u.champ.mr : 20,
-      ap: 0,
+      ad: calculatedAd,
+      baseAd: u.ad,
+      as: calculatedAs,
+      baseAs: calculatedBaseAs,
+      bonusAsPct,
+      armor: (u.champ.armor || 20) + bonusArmor,
+      mr: (u.champ.mr != null ? u.champ.mr : 20) + bonusMr,
+      ap: bonusAp,
+      critChance: Math.min(1.0, critChance),
+      critDamage,
+      dodge: Math.min(0.7, dodge),
+      lifesteal,
+      omnivamp,
+      spellCrit,
+      manaOnHit,
+      deathbladeStacks,
+      titanStacks,
+      hasWarmogs,
+      hasBlueBuff,
+      hasShojin,
+      hasRageblade,
+      hasStatikk,
+      hasRunaan,
+      hasGiantSlayer,
+      hasBrambleVest,
+      hasDragonsClaw,
+      hasSunfire,
+      hasMorello,
+      hasLuden,
+      hasIonic,
+      hasTrapClaw,
+      hasGA,
+      gaUsed: false,
+      hasZzrot,
+      hasLastWhisper,
+      hasGunblade,
+      hasBloodthirster,
+      btShieldUsed: false,
+      gunbladeShield: 0,
+      brambleCdUntil: 0,
+      sunfireTimer: 0,
+      ccImmuneUntil: 0,
       r, c,
       x: p.x,
       y: p.y,
@@ -2189,8 +2942,9 @@ class TFTGame {
       divineUsed: false,
       bossUsed: false,
       isSittingUp: false,
-      trueDamage: false,
-      lifesteal: 0
+      isBanished: false,
+      banishedUntil: 0,
+      trueDamage: false
     };
   }
 
@@ -2281,10 +3035,79 @@ class TFTGame {
       battle.sides[side].startHp = sideUnits.reduce((sum, u) => sum + u.maxHp, 0);
     });
 
+    // 시작 아이템 효과 적용 (지크, 성배, 솔라리, 서풍, 장막, 수은, 덫발톱)
+    this.applyStartItems(battle);
+
     this.battle = battle;
     this.dom.boardGrid.classList.add("in-combat");
     this.renderCombatState();
     this.combatInterval = setInterval(() => this.combatTick(), TICK_MS);
+  }
+
+  // 전투 시작 시 아이템 효과 적용
+  applyStartItems(battle) {
+    battle.units.forEach(unit => {
+      if (!unit.items || unit.items.length === 0) return;
+
+      // 수은: 전투 시작 10초간 CC 면역
+      if (unit.items.includes('quicksilver')) {
+        unit.ccImmuneUntil = battle.currentTime + 10000;
+        this.spawnBurstEffect(unit.x, unit.y - 20, "🛡️", 1200);
+      }
+
+      // 덫 발톱: 1회 스펠 쉴드
+      if (unit.items.includes('trap_claw')) {
+        unit.hasSpellShield = true;
+      }
+
+      // 지크의 전령: 같은 행 좌우 1칸 아군 공속 +30%
+      if (unit.items.includes('zekes_herald')) {
+        battle.units.filter(u => u.side === unit.side && u.r === unit.r && Math.abs(u.c - unit.c) === 1).forEach(ally => {
+          ally.as = Math.min(5.0, ally.as + ally.baseAs * 0.30);
+          this.spawnDamagePopup(ally.x, ally.y - 20, "공속 +30%", "skill");
+        });
+      }
+
+      // 힘의 성배: 같은 행 좌우 1칸 아군 주문력 +30
+      if (unit.items.includes('chalice_of_power')) {
+        battle.units.filter(u => u.side === unit.side && u.r === unit.r && Math.abs(u.c - unit.c) === 1).forEach(ally => {
+          ally.ap += 30;
+          this.spawnDamagePopup(ally.x, ally.y - 20, "주문력 +30", "magic");
+        });
+      }
+
+      // 강철의 솔라리 펜던트: 같은 행 좌우 2칸 아군 300 보호막 (8초)
+      if (unit.items.includes('locket_of_the_iron_solari')) {
+        battle.units.filter(u => u.side === unit.side && u.r === unit.r && Math.abs(u.c - unit.c) <= 2).forEach(ally => {
+          ally.shield += 300;
+          battle.schedule(8000, () => { ally.shield = Math.max(0, ally.shield - 300); });
+          this.spawnDamagePopup(ally.x, ally.y - 20, "보호막 +300", "heal");
+        });
+      }
+
+      // 서풍: 대칭 반대편 적 5초간 추방
+      if (unit.items.includes('zephyr')) {
+        const oppRow = 5 - unit.r;
+        const oppCol = 6 - unit.c;
+        const enemies = battle.units.filter(u => u.side !== unit.side && !u.isBanished);
+        if (enemies.length > 0) {
+          enemies.sort((a, b) => Math.hypot(a.r - oppRow, a.c - oppCol) - Math.hypot(b.r - oppRow, b.c - oppCol));
+          const target = enemies[0];
+          target.isBanished = true;
+          target.banishedUntil = battle.currentTime + 5000;
+          this.spawnBurstEffect(target.x, target.y, "🌪️", 5000);
+          this.spawnDamagePopup(target.x, target.y - 30, "서풍 추방 (5초)", "magic");
+        }
+      }
+
+      // 침묵의 장막: 직선 전방 적들 최대 마나 35% 증가
+      if (unit.items.includes('shroud_of_stillness')) {
+        battle.units.filter(u => u.side !== unit.side && Math.abs(u.c - unit.c) <= 1).forEach(enemy => {
+          enemy.maxMana = Math.round(enemy.maxMana * 1.35);
+          this.spawnDamagePopup(enemy.x, enemy.y - 20, "마나 증가 35%", "magic");
+        });
+      }
+    });
   }
 
   applyStartTraits(battle, side, sideUnits, counts) {
@@ -2319,14 +3142,14 @@ class TFTGame {
   }
 
   targetableUnits(battle, predicate = () => true) {
-    return battle.units.filter(u => u.hp > 0 && !u.isSittingUp && predicate(u));
+    return battle.units.filter(u => u.hp > 0 && !u.isSittingUp && !u.isBanished && !u.isReviving && predicate(u));
   }
 
   findTarget(battle, unit) {
     // 기존 대상이 유효하면 유지 (TFT처럼 대상이 죽기 전까지 고정)
     if (unit.targetUid) {
       const cur = battle.units.find(u => u.uid === unit.targetUid);
-      if (cur && cur.hp > 0 && !cur.isSittingUp) return cur;
+      if (cur && cur.hp > 0 && !cur.isSittingUp && !cur.isBanished && !cur.isReviving) return cur;
     }
     const enemies = this.targetableUnits(battle, u => u.side !== unit.side);
     if (enemies.length === 0) return null;
@@ -2347,14 +3170,22 @@ class TFTGame {
     battle.currentTime += TICK_MS;
     const now = battle.currentTime;
 
-    // 예약된 이벤트 처리 (갈리오 착지, 세트 복귀 등)
+    // 예약된 이벤트 처리 (갈리오 착지, 세트 복귀, 가엔 부활 등)
     const due = battle.events.filter(e => e.at <= now);
     battle.events = battle.events.filter(e => e.at > now);
     due.forEach(e => e.fn());
 
-    // 승패 체크 (윗몸일으키기 중인 세트도 살아있는 유닛으로 취급)
-    const alivePlayers = battle.units.filter(u => u.side === "player" && u.hp > 0);
-    const aliveEnemies = battle.units.filter(u => u.side === "enemy" && u.hp > 0);
+    // 서풍 추방 해제 체크
+    battle.units.forEach(u => {
+      if (u.isBanished && u.banishedUntil <= now) {
+        u.isBanished = false;
+        this.spawnDamagePopup(u.x, u.y - 20, "추방 해제!", "heal");
+      }
+    });
+
+    // 승패 체크 (소환수는 승패 유닛 수 카운트 제외, 윗몸일으키기 중인 세트도 살아있는 유닛으로 취급)
+    const alivePlayers = battle.units.filter(u => u.side === "player" && u.hp > 0 && !u.isSummon);
+    const aliveEnemies = battle.units.filter(u => u.side === "enemy" && u.hp > 0 && !u.isSummon);
     if (aliveEnemies.length === 0) { this.endCombat(true); return; }
     if (alivePlayers.length === 0) {
       if (battle.playerStartedEmpty && now < 1200 && !battle.isHeadless) {
@@ -2375,8 +3206,23 @@ class TFTGame {
 
     const dt = TICK_MS / 1000;
     battle.units.forEach(unit => {
-      if (unit.hp <= 0 || unit.isSittingUp) return;
+      if (unit.hp <= 0 || unit.isSittingUp || unit.isBanished || unit.isReviving) return;
       this.checkDivine(battle, unit);
+
+      // 태양불꽃 망토: 2초마다 2칸 내 무작위 적 1명에게 화상
+      if (unit.hasSunfire) {
+        unit.sunfireTimer = (unit.sunfireTimer || 0) + dt;
+        if (unit.sunfireTimer >= 2.0) {
+          unit.sunfireTimer = 0;
+          const enemies = battle.getEnemiesInRange(unit, 2, 99);
+          if (enemies.length > 0) {
+            const burned = enemies[Math.floor(Math.random() * enemies.length)];
+            battle.dealDamage(unit, burned, burned.maxHp * 0.05, "true");
+            this.spawnBurstEffect(burned.x, burned.y, "🔥", 600);
+          }
+        }
+      }
+
       if (unit.stunnedUntil > now) return; // 기절 상태
 
       const target = this.findTarget(battle, unit);
@@ -2457,12 +3303,36 @@ class TFTGame {
   }
 
   executeUnitAttack(battle, unit, target) {
+    if (unit.hp <= 0 || unit.isSittingUp || unit.isBanished || unit.isReviving) return;
+
+    // 회피 판정
+    if (Math.random() < (target.dodge || 0)) {
+      this.spawnDamagePopup(target.x, target.y - 20, "회피!", "heal");
+      return;
+    }
+
     unit.attackCount++;
     if (battle.currentTime - battle.lastAttackSoundAt >= 200) {
       battle.lastAttackSoundAt = battle.currentTime;
       sound.playAttack();
     }
     this.animateAttack(battle, unit, target);
+
+    // 구인수의 격노검: 공격마다 공속 +6% (최대 5.0)
+    if (unit.hasRageblade) {
+      unit.as = Math.min(5.0, unit.as + (unit.baseAs * 0.06));
+    }
+
+    // 거인의 결의: 공격 시 스택
+    if (unit.hasTitan) {
+      unit.titanStacks = Math.min(25, (unit.titanStacks || 0) + 1);
+      unit.ad += 2;
+      unit.ap += 2;
+      if (unit.titanStacks === 25) {
+        unit.armor += 25;
+        unit.mr += 25;
+      }
+    }
 
     let damage = unit.ad;
     // 진: 매 4번째 공격은 잃은 체력 비례 치명타 탄환
@@ -2473,9 +3343,28 @@ class TFTGame {
     }
     this.dealDamage(battle, unit, target, damage, "physical");
 
-    // 마나 충전 (평타당 10) → 스킬 시전
+    // 루난의 허리케인: 주변 다른 적 1명에게 75% 물리 피해 탄환 발사
+    if (unit.hasRunaan) {
+      const extraFoes = battle.getEnemiesInRange(unit, (unit.champ.range || 1) + 1, 3).filter(e => e.uid !== target.uid);
+      if (extraFoes.length > 0) {
+        this.dealDamage(battle, unit, extraFoes[0], damage * 0.75, "physical");
+        this.spawnBurstEffect(extraFoes[0].x, extraFoes[0].y, "🏹", 400);
+      }
+    }
+
+    // 스태틱의 단검: 매 3번째 공격마다 3명에게 80 마법 피해
+    if (unit.hasStatikk && unit.attackCount % 3 === 0) {
+      const chainTargets = battle.getEnemiesInRange(target, 3, 3);
+      chainTargets.forEach(e => {
+        this.dealDamage(battle, unit, e, 80, "magic");
+      });
+      this.spawnBurstEffect(target.x, target.y, "⚡", 600);
+    }
+
+    // 마나 충전 (평타당 10 + 쇼진/아이템 manaOnHit) → 스킬 시전
     if (unit.maxMana > 0 && unit.hp > 0) {
-      unit.mana = Math.min(unit.maxMana, unit.mana + 10);
+      const manaGain = 10 + (unit.manaOnHit || 0);
+      unit.mana = Math.min(unit.maxMana, unit.mana + manaGain);
       if (unit.mana >= unit.maxMana) {
         unit.mana = 0;
         const skillTarget = target.hp > 0 ? target : this.findTarget(battle, unit);
@@ -2484,10 +3373,10 @@ class TFTGame {
     }
 
     // 결투가: 시너지 활성 시 공격마다 공속 중첩 (최대 8회)
-    const duelPct = battle.sides[unit.side].duelistPct;
+    const duelPct = battle.sides[unit.side] ? battle.sides[unit.side].duelistPct : 0;
     if (duelPct > 0 && unit.champ.traits.includes("duelist") && unit.duelistStacks < 8) {
       unit.duelistStacks++;
-      unit.as = unit.baseAs * (1 + duelPct * unit.duelistStacks) + (unit.bonusAs || 0);
+      unit.as = Math.min(5.0, unit.baseAs * (1 + duelPct * unit.duelistStacks) + (unit.bonusAs || 0));
     }
 
     // 칼리스타: 창 누적 → 창 피해가 남은 체력 이상이면 즉시 뽑아 찢기
@@ -2504,6 +3393,16 @@ class TFTGame {
 
   castUnitSkill(battle, unit, target) {
     if (!unit.champ.skill) return;
+
+    // 덫 발톱(trap_claw) 스펠 쉴드 판정
+    if (target.hasSpellShield) {
+      target.hasSpellShield = false;
+      unit.stunnedUntil = Math.max(unit.stunnedUntil, battle.currentTime + 4000);
+      this.spawnDamagePopup(target.x, target.y - 30, "스킬 무효화!", "heal");
+      this.spawnDamagePopup(unit.x, unit.y - 30, "기절! (4초)", "magic");
+      return;
+    }
+
     const el = battle.tokens && battle.tokens.get(unit.uid);
     if (el) {
       el.classList.remove("casting");
@@ -2511,24 +3410,42 @@ class TFTGame {
       el.classList.add("casting");
     }
 
-// 스킬 시전 시 시야를 가리는 스킬명 텍스트 배너 제거 (스킬 애니메이션 완전 노출)
-
-    // 2. 5코스트 궁극기 및 대형 스킬 시전 시 화면 진동 (손맛 극대화)
+    // 5코스트 궁극기 및 대형 스킬 시전 시 화면 진동
     if (["sett", "leeSin", "galio", "warwick", "sejuani"].includes(unit.champ.id)) {
       document.body.classList.add("screen-shake");
       setTimeout(() => document.body.classList.remove("screen-shake"), 300);
     }
 
-    // 3. 챔피언 고유 초대형 스페셜 VFX
+    // 챔피언 고유 초대형 스페셜 VFX
     this.spawnChampionSpecialVFX(battle, unit, target);
 
-    // 4. 챔피언 특성에 맞는 박진감 넘치는 스킬 효과음
+    // 챔피언 특성에 맞는 박진감 넘치는 스킬 효과음
     const slamChamps = ["sett", "leeSin", "galio"];
     const slashChamps = ["yasuo", "yone", "katarina", "garen", "diana"];
     const soundType = slamChamps.includes(unit.champ.id) ? "slam" : slashChamps.includes(unit.champ.id) ? "slash" : "burst";
     sound.playSkillSound(soundType);
 
     unit.champ.skill(unit, target, battle);
+
+    // 블루 버프: 스킬 시전 후 마나 20 반환
+    if (unit.hasBlueBuff) {
+      unit.mana = 20;
+    }
+
+    // 루덴의 메아리: 스킬 시전 시 주변 3명 180 마법 피해
+    if (unit.hasLuden && target) {
+      const ludenTargets = battle.getEnemiesInRange(target, 2, 3);
+      ludenTargets.forEach(t => this.dealDamage(battle, unit, t, 180, "magic"));
+      this.spawnBurstEffect(target.x, target.y, "🌊", 600);
+    }
+
+    // 이온 충격기 카운터: 주변 2칸 내의 적 이온 착용자가 있다면 소모 마나의 225% 마법 피해 피격
+    const nearbyEnemyIonics = battle.getEnemiesInRange(unit, 2, 1).filter(e => e.hasIonic);
+    if (nearbyEnemyIonics.length > 0 && unit.champ.maxMana > 0) {
+      const zappedDmg = (unit.champ.maxMana || 100) * 2.25;
+      this.dealDamage(battle, nearbyEnemyIonics[0], unit, zappedDmg, "magic");
+      this.spawnBurstEffect(unit.x, unit.y, "⚡", 600);
+    }
   }
 
   // 초대형 스킬 컷인 배너 (스킬 이름이 한눈에 띔)
@@ -2644,7 +3561,7 @@ class TFTGame {
   }
 
   dealDamage(battle, attacker, defender, amount, type = "physical") {
-    if (!defender || defender.hp <= 0 || defender.isSittingUp) return 0;
+    if (!defender || defender.hp <= 0 || defender.isSittingUp || defender.isReviving) return 0;
     const now = battle.currentTime;
 
     if (attacker) {
@@ -2652,14 +3569,59 @@ class TFTGame {
       if (type === "magic") amount *= 1 + (attacker.ap || 0) / 100;
       // 투지 폭발 세트 / 신성 상태 → 고정 피해
       if (attacker.trueDamage || attacker.divineUntil > now) type = "true";
+
+      // 치명타 계산 (물리 공격/스킬 또는 보석 건틀릿 착용 시 마법 스킬 치명타 가능)
+      const canCrit = (type === "physical") || (attacker.spellCrit && type === "magic");
+      const isCrit = canCrit && (Math.random() < (attacker.critChance || 0));
+      if (isCrit) {
+        amount *= (attacker.critDamage || 1.50);
+
+        // 최후의 속삭임(라위): 치명타 시 대상 방어력 70% 파쇄 (5초)
+        if (attacker.hasLastWhisper) {
+          defender.armor = Math.max(0, defender.armor * 0.3);
+          this.spawnDamagePopup(defender.x, defender.y - 25, "방어 70% 파쇄", "skill");
+        }
+
+        // 덤불 조끼(bramble_vest): 치명타 추가 피해 무효화 & 가시 반사 100 마법 피해
+        if (defender.hasBrambleVest) {
+          amount /= (attacker.critDamage || 1.50);
+          if (now >= (defender.brambleCdUntil || 0)) {
+            defender.brambleCdUntil = now + 2500;
+            battle.schedule(100, () => {
+              if (attacker.hp > 0) this.dealDamage(battle, defender, attacker, 100, "magic");
+            });
+            this.spawnBurstEffect(defender.x, defender.y, "🛡️💥", 400);
+          }
+        }
+      }
+
+      // 거인 학살자: 최대 체력 1750 이상 대상 공격 시 피해 90% 증폭 (미만 시 10%)
+      if (attacker.hasGiantSlayer) {
+        amount *= (defender.maxHp >= 1750 ? 1.90 : 1.10);
+      }
     }
 
-    // 방어력 / 마법 저항력
+    // 방어력 / 마법 저항력 계산
     if (type === "physical") amount *= 100 / (100 + (defender.armor || 0));
-    else if (type === "magic") amount *= 100 / (100 + (defender.mr || 0));
+    else if (type === "magic") {
+      // 용의 발톱: 마법 피해 60% 감소
+      if (defender.hasDragonsClaw) amount *= 0.40;
+      amount *= 100 / (100 + (defender.mr || 0));
+    }
 
     // 신성 상태: 받는 피해 50% 감소
     if (defender.divineUntil > now) amount *= 0.5;
+
+    // 거인의 결의: 피격 시 스택 증가
+    if (defender.hasTitan) {
+      defender.titanStacks = Math.min(25, (defender.titanStacks || 0) + 1);
+      defender.ad += 2;
+      defender.ap += 2;
+      if (defender.titanStacks === 25) {
+        defender.armor += 25;
+        defender.mr += 25;
+      }
+    }
 
     amount = Math.max(0, amount);
     let hpDamage = amount;
@@ -2671,6 +3633,13 @@ class TFTGame {
       hpDamage -= absorbed;
     }
 
+    // 피바라기 보호막: 체력 40% 이하 도달 시 최대 375 실드 (1회)
+    if (defender.hasBloodthirster && !defender.btShieldUsed && (defender.hp - hpDamage) <= defender.maxHp * 0.4) {
+      defender.btShieldUsed = true;
+      defender.shield += 375;
+      this.spawnDamagePopup(defender.x, defender.y - 20, "피바라기 실드 +375", "heal");
+    }
+
     defender.hp -= hpDamage;
     if (amount >= 1) this.spawnDamagePopup(defender.x, defender.y, Math.round(amount), type);
 
@@ -2679,22 +3648,99 @@ class TFTGame {
       defender.mana = Math.min(defender.maxMana, defender.mana + Math.min(12, amount * 0.04));
     }
 
-    // 흡혈 (워윅)
-    if (attacker && attacker.lifesteal > 0 && attacker.hp > 0) {
-      attacker.hp = Math.min(attacker.maxHp, attacker.hp + amount * attacker.lifesteal);
+    // 흡혈 처리 (총검 / 피바라기 / 정손 / 워윅 고유 흡혈)
+    if (attacker && attacker.hp > 0) {
+      if (attacker.hasGunblade) {
+        const healAmt = amount * 0.33;
+        const overHeal = Math.max(0, (attacker.hp + healAmt) - attacker.maxHp);
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmt);
+        attacker.shield = Math.min(400, (attacker.shield || 0) + overHeal);
+      }
+      if (attacker.hasBloodthirster && type === "physical") {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + amount * 0.40);
+      }
+      if (attacker.omnivamp > 0) {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + amount * attacker.omnivamp);
+      }
+      if (attacker.lifesteal > 0 && type === "physical") {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + amount * attacker.lifesteal);
+      }
     }
 
+    // 사망 시 처리
     if (defender.hp <= 0) {
+      // 1. 수호천사(GA) 부활 (1회 한정: 2초 후 400 HP로 부활)
+      if (defender.hasGA && !defender.gaUsed) {
+        defender.gaUsed = true;
+        defender.isReviving = true;
+        defender.hp = 1;
+        defender.stunnedUntil = now + 2000;
+        this.spawnBurstEffect(defender.x, defender.y, "👼", 2000);
+        this.spawnDamagePopup(defender.x, defender.y - 30, "수호천사 부활 중...", "heal");
+
+        battle.schedule(2000, () => {
+          defender.isReviving = false;
+          defender.hp = 400;
+          defender.stunnedUntil = 0;
+          this.spawnBurstEffect(defender.x, defender.y, "✨", 800);
+          this.spawnDamagePopup(defender.x, defender.y - 30, "수호천사 부활!", "heal");
+        });
+        return amount;
+      }
+
+      // 2. 최종 사망 처리
       defender.hp = 0;
+
+      // 즈롯 차원문: 사망 시 공허 생명체 소환
+      if (defender.hasZzrot && !defender.zzrotSpawned) {
+        defender.zzrotSpawned = true;
+        this.spawnZzrotConstruct(battle, defender);
+      }
+
+      // 처치자 데스블레이드 스택 증가 (처치 시 AD +20)
+      if (attacker && attacker.hp > 0 && attacker.deathbladeStacks !== undefined) {
+        attacker.deathbladeStacks++;
+        attacker.ad += 20;
+        this.spawnDamagePopup(attacker.x, attacker.y - 20, "데스블레이드 +20 AD", "skill");
+      }
+
       return amount;
     }
 
     // 우두머리(세트) 윗몸일으키기 체크
-    if (defender.champ.traits.includes("theBoss") && !defender.bossUsed && defender.hp <= defender.maxHp * 0.4) {
+    if (defender.champ.traits.includes("theBoss") && !defender.bossUsed && !defender.isReviving && defender.hp <= defender.maxHp * 0.4) {
       defender.bossUsed = true;
       this.triggerSettSitups(battle, defender);
     }
     return amount;
+  }
+
+  // 즈롯 차원문 공허 생명체 소환 (소환수는 승패 유닛 수 카운트 제외)
+  spawnZzrotConstruct(battle, deadUnit) {
+    const champ = {
+      id: "zzrot_voidspawn",
+      name: "공허 생명체",
+      cost: 1,
+      traits: [],
+      icon: "👾",
+      color: "#6b21a8",
+      hp: 1500,
+      ad: 100,
+      as: 0.75,
+      armor: 40,
+      mr: 40,
+      range: 1,
+      startMana: 0,
+      maxMana: 100
+    };
+    const voidspawn = this.createBattleUnit(makeUnit(champ, 1, deadUnit.side), deadUnit.r, deadUnit.c, battle.geo);
+    voidspawn.uid = `zzrot_${deadUnit.uid}_${battle.currentTime}`;
+    voidspawn.isSummon = true;
+    voidspawn.x = deadUnit.x;
+    voidspawn.y = deadUnit.y;
+    battle.units.push(voidspawn);
+    this.spawnBurstEffect(voidspawn.x, voidspawn.y, "👾💥", 800);
+    this.spawnDamagePopup(voidspawn.x, voidspawn.y - 25, "즈롯 소환!", "skill");
   }
 
   // 우두머리(세트) 윗몸일으키기 연출: 전장 이탈 → 2.5초 후 풀피 & 고정 피해로 복귀
@@ -2774,6 +3820,7 @@ class TFTGame {
       };
       const galio = this.createBattleUnit(makeUnit(champ, isLord ? 3 : 2, side), 0, 0, battle.geo);
       galio.uid = `galio_${side}_${battle.id}`;
+      galio.isSummon = true;
       galio.maxHp = hp;
       galio.hp = hp;
       galio.ad = ad;
@@ -2932,11 +3979,11 @@ class TFTGame {
     if (battle && battle.layer) battle.layer.remove();
     this.dom.boardGrid.classList.remove("in-combat");
 
-    const round = ROUNDS[this.roundIdx] || {};
+    const round = this.getRoundInfo(this.roundIdx) || {};
     const currentPvPOpp = this.getCurrentRoundOpponent();
     const stageStr = String(round.stage || "1").split("-")[0];
     const stageNum = parseInt(stageStr, 10) || 1;
-    const counts = battle ? battle.sides.player.counts : this.updateSynergies();
+    const counts = battle ? (battle.sides.player ? battle.sides.player.counts : {}) : this.updateSynergies();
     const log = [];
 
     let pvpDamageToOpponent = 0;
@@ -2950,7 +3997,7 @@ class TFTGame {
         log.push("승리 수당 +1");
 
         // 내가 이긴 PvP 상대에게 가할 데미지 계산 (기본 스테이지 피해 + 살아남은 아군 1기당 2)
-        const alivePlayers = battle ? battle.units.filter(u => u.side === "player" && u.hp > 0).length : 1;
+        const alivePlayers = battle ? battle.units.filter(u => u.side === "player" && u.hp > 0 && !u.isSummon).length : 1;
         pvpDamageToOpponent = (stageNum * 3) + alivePlayers * 2;
       }
 
@@ -2974,10 +4021,27 @@ class TFTGame {
         this.player.warlordWins++;
       }
 
-      // 크립 라운드 전리품 보상
+      // 크립 라운드 전리품 및 기본 아이템 드롭 보상
       if (round.rewardGold) {
         this.player.gold += round.rewardGold;
         log.push(`💰 전리품 +${round.rewardGold}`);
+      }
+      if (!round.isPvP) {
+        // 크립 라운드 승리 시 기본 아이템 1~2개 획득 (스테이지가 높을수록 2개 확률 증가)
+        const dropCount = (stageNum >= 3 && Math.random() < 0.6) ? 2 : 1;
+        let droppedNames = [];
+        for (let i = 0; i < dropCount; i++) {
+          if (!this.player.itemInventory) this.player.itemInventory = [];
+          if (this.player.itemInventory.length < 10) {
+            const randomBase = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
+            this.player.itemInventory.push(randomBase.id);
+            droppedNames.push(`${randomBase.icon} ${randomBase.name}`);
+          }
+        }
+        if (droppedNames.length > 0) {
+          this.renderItemInventory();
+          log.push(`🎁 ${droppedNames.join(", ")} 획득!`);
+        }
       }
     } else {
       sound.playDefeat();
@@ -2987,7 +4051,7 @@ class TFTGame {
       }
 
       // 패배 시 플레이어 HP 차감: 스테이지 기본 피해 + 살아남은 적 1기당 2
-      const aliveEnemies = battle ? battle.units.filter(u => u.side === "enemy" && u.hp > 0).length : 1;
+      const aliveEnemies = battle ? battle.units.filter(u => u.side === "enemy" && u.hp > 0 && !u.isSummon).length : 1;
       const damageTaken = stageNum + aliveEnemies * 2;
       this.player.hp = Math.max(0, this.player.hp - damageTaken);
       log.push(`❤️ -${damageTaken}`);
@@ -2997,62 +4061,57 @@ class TFTGame {
       }
     }
 
-    // 게임 오버 체크 (HP 소진 시 다음 라운드 골드/이자/경험치 없이 즉시 종료)
+    // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
+    this.simulateLobbyDamage(currentPvPOpp, playerWon, pvpDamageToOpponent, stageNum);
+
+    // 1. 게임 오버 체크 (HP 소진 시 즉시 종료 - 추가 보상 없음)
     if (this.player.hp <= 0) {
       this.phase = "gameover";
       this.setCombatButtonState(false);
       this.showToastNotification(`💔 패배... ${log.join("  ")}`, "error");
+
+      // 플레이어 탈락 등수 부여 (8인 로비 기준 1~8등)
+      const playerEntry = this.lobbyOpponents.find(o => o.isPlayer || o.id === "player");
+      if (playerEntry) {
+        playerEntry.hp = 0;
+        playerEntry.isAlive = false;
+      }
+      const otherAliveCount = this.lobbyOpponents.filter(p => p.isAlive).length;
+      if (playerEntry) {
+        playerEntry.placement = Math.max(1, Math.min(8, otherAliveCount + 1));
+      }
+
       this.updateHUD();
       this.updateScoreboardUI();
-      this.showGameOverModal();
+      this.showGameOverModal(playerEntry ? playerEntry.placement : 8);
       return;
     }
 
-    // 로비 AI 플레이어 피해 시뮬레이션 (내가 이긴 PvP 상대는 데미지 직접 적용)
-    this.simulateLobbyDamage(currentPvPOpp, playerWon, pvpDamageToOpponent, stageNum);
-
-    // 다음 라운드로 전환
-    this.roundIdx++;
-    this.syncLobbyOpponentsGrowth();
-
-    // 완주 또는 로비 생존자 체크 (우승 / 최종 순위 판정)
+    // 2. 최후의 1인 승리 체크 (나 혼자 남은 경우)
     const aliveOpponents = this.lobbyOpponents ? this.lobbyOpponents.filter(o => !o.isPlayer && o.isAlive) : [];
-    if (this.roundIdx >= ROUNDS.length || aliveOpponents.length === 0) {
+    if (aliveOpponents.length === 0) {
       this.phase = "victory";
       this.setCombatButtonState(false);
-      this.showToastNotification(`${playerWon ? "🏆 승리!" : "💔 패배..."}  ${log.join("  ")}`, playerWon ? "success" : "error");
+      this.showToastNotification(`🏆 최후의 1인 우승! ${log.join("  ")}`, "success");
+
+      const playerEntry = this.lobbyOpponents.find(o => o.isPlayer || o.id === "player");
+      if (playerEntry) {
+        playerEntry.placement = 1;
+      }
       this.updateHUD();
       this.updateScoreboardUI();
-
-      // 플레이어 및 상대 체력 기반 최종 순위 계산
-      const playerEntry = this.lobbyOpponents ? this.lobbyOpponents.find(o => o.isPlayer || o.id === "player") : null;
-      if (playerEntry) {
-        playerEntry.hp = this.player.hp;
-        playerEntry.isAlive = (this.player.hp > 0);
-      }
-      const sorted = this.lobbyOpponents ? [...this.lobbyOpponents].sort((a, b) => {
-        if (a.isAlive && !b.isAlive) return -1;
-        if (!a.isAlive && b.isAlive) return 1;
-        return b.hp - a.hp;
-      }) : [];
-      const rank = Math.max(1, sorted.findIndex(o => o.isPlayer || o.id === "player") + 1);
-
-      this.showVictoryModal(rank);
+      this.showVictoryModal(1);
       return;
     }
 
-    // 다음 라운드 공식 기본 골드 지급 (1-2: 2G, 1-3: 2G, 2-1: 4G, 2-2+: 5G)
-    const nextRound = ROUNDS[this.roundIdx];
+    // 3. 다음 라운드로 계속 진행 (골드, 이자, 경험치 지급)
+    const nextRound = this.getRoundInfo(this.roundIdx + 1);
     const baseGold = (nextRound && nextRound.roundGold !== undefined) ? nextRound.roundGold : 5;
-
-    // 이자 (10G당 1G, 최대 5G)
     const interest = Math.min(5, Math.floor(this.player.gold / 10));
-
-    // 연승 / 연패 보너스 (2~3연: 1G, 4연: 2G, 5연+: 3G)
     const streak = Math.max(this.player.winStreak, this.player.lossStreak);
     const streakBonus = streak >= 5 ? 3 : streak >= 4 ? 2 : streak >= 2 ? 1 : 0;
-
     const roundGold = baseGold + interest + streakBonus;
+
     this.player.gold += roundGold;
     if (roundGold > 0) {
       log.push(`🪙 +${roundGold} (기본 ${baseGold} · 이자 ${interest} · 연속 ${streakBonus})`);
@@ -3060,23 +4119,92 @@ class TFTGame {
 
     this.showToastNotification(`${playerWon ? "🏆 승리!" : "💔 패배..."}  ${log.join("  ")}`, playerWon ? "success" : "error");
 
-    // 경험치 +2
+    // 경험치 +2 지급
     this.gainExp(2);
+
+    // 다음 라운드 인덱스 증가
+    this.roundIdx++;
+    this.syncLobbyOpponentsGrowth();
 
     // 준비 단계 복귀
     this.phase = "planning";
     this.setCombatButtonState(false);
 
-    // 상점 자동 리롤 (잠금 시 유지)
+    // 상점 자동 리롤
     this.refreshShop(false);
 
-    // 적 필드 청소 및 다음 라운드 상대 미리 스카우팅 배치
-    this.previewEnemyUnits(ROUNDS[this.roundIdx]);
+    // 다음 라운드 상대 미리 스카우팅 배치
+    this.previewEnemyUnits(this.getRoundInfo(this.roundIdx));
 
     this.renderUnits();
     this.updateHUD();
     this.updateSynergies();
     this.updateScoreboardUI();
+
+    // x-2 라운드 시작 시 무기고 아이템 선택 이벤트 모달 (2-2, 3-2, 4-2, 5-2, 6-2 등)
+    const nextStageStr = String(this.getRoundInfo(this.roundIdx)?.stage || "1-1");
+    if (nextStageStr.endsWith("-2")) {
+      setTimeout(() => this.showItemChoiceModal(), 400);
+    }
+  }
+
+  // 무기고 아이템 선택 모달 (3개 중 1개 선택)
+  showItemChoiceModal() {
+    if (this.phase !== "planning") return;
+
+    // 무작위 기본 아이템 3개 추첨
+    const choices = [];
+    const pool = [...BASE_ITEMS];
+    for (let i = 0; i < 3; i++) {
+      const idx = Math.floor(Math.random() * pool.length);
+      choices.push(pool.splice(idx, 1)[0]);
+    }
+
+    const modal = document.createElement("div");
+    modal.className = "info-modal item-choice-modal";
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 580px;">
+        <h2>🎁 무기고: 기본 아이템 선택</h2>
+        <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">원하는 기본 아이템 1개를 선택하여 보관함에 획득하세요.</p>
+        <div style="display: flex; gap: 14px; justify-content: center; margin-bottom: 24px;">
+          ${choices.map((it, idx) => `
+            <div class="item-choice-card" data-idx="${idx}" style="flex: 1; background: rgba(30, 41, 59, 0.9); border: 2px solid #eab308; border-radius: 12px; padding: 16px 12px; text-align: center; cursor: pointer; transition: transform 0.2s, background 0.2s;">
+              <div style="font-size: 38px; margin-bottom: 8px;">${it.icon}</div>
+              <div style="font-weight: 800; font-size: 14px; color: #f8fafc; margin-bottom: 6px;">${it.name}</div>
+              <div style="font-size: 11px; color: #cbd5e1; line-height: 1.4;">${it.desc}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="font-size: 11px; color: #64748b;">(클릭 시 즉시 보관함으로 지급됩니다)</div>
+      </div>
+    `;
+
+    this.dom.modalContainer.appendChild(modal);
+
+    modal.querySelectorAll(".item-choice-card").forEach(card => {
+      card.addEventListener("mouseenter", () => {
+        card.style.transform = "translateY(-4px)";
+        card.style.background = "rgba(51, 65, 85, 0.95)";
+      });
+      card.addEventListener("mouseleave", () => {
+        card.style.transform = "none";
+        card.style.background = "rgba(30, 41, 59, 0.9)";
+      });
+      card.addEventListener("click", () => {
+        const cIdx = parseInt(card.dataset.idx, 10);
+        const selected = choices[cIdx];
+        if (!this.player.itemInventory) this.player.itemInventory = [];
+        if (this.player.itemInventory.length < 10) {
+          this.player.itemInventory.push(selected.id);
+          this.renderItemInventory();
+          sound.playBuy();
+          this.showToastNotification(`🎁 ${selected.name} 획득 완료!`, "success");
+        } else {
+          this.showToastNotification("아이템 보관함이 가득 차서 받을 수 없습니다!", "error");
+        }
+        modal.remove();
+      });
+    });
   }
 
   showJackpotModal(streak, gold) {
@@ -3093,28 +4221,14 @@ class TFTGame {
     document.getElementById("btn-close-jackpot").addEventListener("click", () => modal.remove());
   }
 
-  showGameOverModal() {
-    let rank = 8;
-    if (this.lobbyOpponents) {
-      const playerEntry = this.lobbyOpponents.find(o => o.isPlayer || o.id === "player");
-      if (playerEntry) {
-        playerEntry.hp = 0;
-        playerEntry.isAlive = false;
-      }
-      const sorted = [...this.lobbyOpponents].sort((a, b) => {
-        if (a.isAlive && !b.isAlive) return -1;
-        if (!a.isAlive && b.isAlive) return 1;
-        return b.hp - a.hp;
-      });
-      rank = Math.max(1, sorted.findIndex(o => o.isPlayer || o.id === "player") + 1);
-    }
-
+  showGameOverModal(rank = 8) {
     const modal = document.createElement("div");
     modal.className = "info-modal";
+    const currentRound = this.getRoundInfo(this.roundIdx);
     modal.innerHTML = `
       <div class="modal-content">
         <h2>💀 패배 (Game Over - ${rank}등)</h2>
-        <p>체력이 모두 소진되었습니다.<br>최종 순위: <strong>${rank}등</strong> (도달 라운드: <strong>${ROUNDS[this.roundIdx]?.stage || '최종'}</strong>)</p>
+        <p>체력이 모두 소진되어 경기에서 탈락했습니다.<br>최종 순위: <strong>${rank}등</strong> (도달 라운드: <strong>${currentRound ? currentRound.stage : '최종'}</strong>)</p>
         <button class="btn-action" onclick="location.reload()">다시 도전하기</button>
       </div>
     `;
@@ -3124,19 +4238,20 @@ class TFTGame {
   showVictoryModal(rank = 1) {
     const modal = document.createElement("div");
     modal.className = "info-modal";
+    const currentRound = this.getRoundInfo(this.roundIdx);
     if (rank === 1) {
       modal.innerHTML = `
         <div class="modal-content">
           <h2>🏆 최종 우승 (1등 달성!)</h2>
-          <p>TFT 시즌 4: 운명의 모든 라운드를 클리어하고 최종 <strong>1등</strong>으로 챔피언이 되었습니다!<br>완성 덱의 위력이 대단했습니다.</p>
-          <button class="btn-action" onclick="location.reload()">새로운 덱으로 시작하기</button>
+          <p>모든 경쟁자들을 물리치고 결투장의 최후의 1인이 되었습니다!<br>최종 순위 <strong>1등</strong>으로 우승 트로피를 차지했습니다.</p>
+          <button class="btn-action" onclick="location.reload()">새로운 게임 시작하기</button>
         </div>
       `;
     } else {
       modal.innerHTML = `
         <div class="modal-content">
           <h2>🎖️ 경기 종료 (최종 ${rank}등)</h2>
-          <p>TFT 시즌 4: 운명의 모든 라운드를 완주했습니다!<br>최종 순위 <strong>${rank}등</strong>으로 경기를 마쳤습니다.</p>
+          <p>경기를 마쳤습니다!<br>최종 순위: <strong>${rank}등</strong> (도달: <strong>${currentRound ? currentRound.stage : '최종'}</strong>)</p>
           <button class="btn-action" onclick="location.reload()">다시 도전하기</button>
         </div>
       `;
@@ -3146,7 +4261,7 @@ class TFTGame {
 
   // 스테이지 스킵 (전투 애니메이션 없이 결과만 즉시 계산하여 다음 라운드로 진행)
   skipCombat() {
-    if (this.roundIdx >= ROUNDS.length || this.player.hp <= 0) return;
+    if (this.player.hp <= 0) return;
 
     // 만약 정찰 중이었다면 즉시 내 결투장으로 복귀
     if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") {
@@ -3160,15 +4275,16 @@ class TFTGame {
     // 만약 준비 단계라면 전투 시작 조건을 확인하고 배틀 인스턴스 초기화
     if (this.phase === "planning") {
       let playerUnits = this.getBoardUnits("player");
-      if (playerUnits.length < this.player.level) {
+      const maxUnits = this.getMaxTeamSize();
+      if (playerUnits.length < maxUnits) {
         const deployed = this.autoDeployFromBench();
         if (deployed > 0) {
           playerUnits = this.getBoardUnits("player");
         }
       }
 
-      if (playerUnits.length > this.player.level) {
-        this.showToastNotification(`배치 인원 초과! 현재 레벨에서는 ${this.player.level}명까지만 출전할 수 있습니다.`);
+      if (playerUnits.length > maxUnits) {
+        this.showToastNotification(`배치 인원 초과! 현재는 최대 ${maxUnits}명까지만 출전할 수 있습니다.`);
         return;
       }
 
@@ -3180,7 +4296,7 @@ class TFTGame {
       this.updateHUD();
 
       // 적 기물 스폰 & 배틀 인스턴스 생성
-      this.spawnEnemyUnits(ROUNDS[this.roundIdx]);
+      this.spawnEnemyUnits(this.getRoundInfo(this.roundIdx));
       this.initBattleInstance();
     }
 
@@ -3243,7 +4359,8 @@ class TFTGame {
       winStreak: 0,
       lossStreak: 0,
       fortuneStreak: 0,
-      warlordWins: 0
+      warlordWins: 0,
+      itemInventory: []
     };
 
     this.roundIdx = 0;
@@ -3264,8 +4381,9 @@ class TFTGame {
     // 적 스카우팅 및 상점 리롤
     this.scoutedPlayerId = null;
     this.initLobbyOpponents();
-    this.previewEnemyUnits(ROUNDS[this.roundIdx]);
+    this.previewEnemyUnits(this.getRoundInfo(this.roundIdx));
     this.refreshShop(true);
+    this.renderItemInventory();
     this.updateHUD();
     this.updateSynergies();
     this.updateScoreboardUI();
@@ -3285,7 +4403,7 @@ function bootGame() {
   if (!window.tftGame) {
     try {
       window.tftGame = new TFTGame();
-      window.tftData = { CHAMPIONS, ROUNDS, TRAITS };
+      window.tftData = { CHAMPIONS, ROUNDS, TRAITS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS };
     } catch (e) {
       console.error("TFTGame Boot Error:", e);
       window.__bootError = e.stack || e.message;

@@ -772,3 +772,484 @@ export const ROUNDS = [
     ]
   }
 ];
+
+// ==========================================
+// TFT 시즌 4: 운명 (Fates) 아이템 시스템 정의
+// ==========================================
+
+export const BASE_ITEMS = ["bf", "bow", "rod", "tear", "vest", "cloak", "belt", "glove", "spatula"];
+
+export const ITEMS = {
+  // --- 기본 아이템 (9종) ---
+  bf: {
+    id: "bf",
+    name: "B.F. 대검",
+    icon: "🗡️",
+    isComponent: true,
+    stats: { ad: 15 },
+    desc: "공격력 +15"
+  },
+  bow: {
+    id: "bow",
+    name: "곡궁",
+    icon: "🏹",
+    isComponent: true,
+    stats: { as: 0.15 },
+    desc: "공격 속도 +15%"
+  },
+  rod: {
+    id: "rod",
+    name: "쓸데없이 큰 지팡이",
+    icon: "🪄",
+    isComponent: true,
+    stats: { ap: 15 },
+    desc: "주문력 +15"
+  },
+  tear: {
+    id: "tear",
+    name: "여신의 눈물",
+    icon: "💧",
+    isComponent: true,
+    stats: { mana: 15 },
+    desc: "시작 마나 +15"
+  },
+  vest: {
+    id: "vest",
+    name: "쇠사슬 조끼",
+    icon: "🛡️",
+    isComponent: true,
+    stats: { armor: 20 },
+    desc: "방어력 +20"
+  },
+  cloak: {
+    id: "cloak",
+    name: "음전자 망토",
+    icon: "🧥",
+    isComponent: true,
+    stats: { mr: 20 },
+    desc: "마법 저항력 +20"
+  },
+  belt: {
+    id: "belt",
+    name: "거인의 허리띠",
+    icon: "🥋",
+    isComponent: true,
+    stats: { hp: 150 },
+    desc: "체력 +150"
+  },
+  glove: {
+    id: "glove",
+    name: "연습용 장갑",
+    icon: "🥊",
+    isComponent: true,
+    stats: { critChance: 0.10, dodge: 0.10 },
+    desc: "치명타 확률 +10%, 회피율 +10%"
+  },
+  spatula: {
+    id: "spatula",
+    name: "뒤집개",
+    icon: "🥄",
+    isComponent: true,
+    stats: {},
+    desc: "신비한 상징을 조합할 수 있는 특수 재료 아이템입니다."
+  },
+
+  // --- 완성 아이템 (45종) ---
+  deathblade: {
+    id: "deathblade",
+    name: "죽음의 검",
+    icon: "⚔️",
+    recipe: ["bf", "bf"],
+    stats: { ad: 30 },
+    desc: "처치 또는 처치 관여 시 전투 중 공격력이 영구적으로 20 증가합니다 (무제한 중첩)."
+  },
+  giant_slayer: {
+    id: "giant_slayer",
+    name: "거인 학살자",
+    icon: "🏹💥",
+    recipe: ["bf", "bow"],
+    stats: { ad: 15, as: 0.15 },
+    desc: "기본 공격과 스킬이 대상 최대 체력이 1600 이상이면 70%, 미만이면 10%의 추가 피해를 입힙니다."
+  },
+  hextech_gunblade: {
+    id: "hextech_gunblade",
+    name: "마법공학 총검",
+    icon: "🔫✨",
+    recipe: ["bf", "rod"],
+    stats: { ad: 15, ap: 15 },
+    desc: "스킬 피해의 33%만큼 체력을 회복합니다. 초과 회복량은 최대 400의 보호막으로 전환됩니다."
+  },
+  spear_of_shojin: {
+    id: "spear_of_shojin",
+    name: "쇼진의 창",
+    icon: "🔱",
+    recipe: ["bf", "tear"],
+    stats: { ad: 15, mana: 15 },
+    desc: "스킬 사용 후, 기본 공격을 할 때마다 마나를 5 추가로 회복합니다."
+  },
+  guardian_angel: {
+    id: "guardian_angel",
+    name: "수호천사",
+    icon: "👼",
+    recipe: ["bf", "vest"],
+    stats: { ad: 15, armor: 20 },
+    desc: "사망 시 2초 후 400의 체력을 얻고 부활하며 모든 부정적 효과를 제거합니다 (전투당 1회)."
+  },
+  bloodthirster: {
+    id: "bloodthirster",
+    name: "피바라기",
+    icon: "🩸🗡️",
+    recipe: ["bf", "cloak"],
+    stats: { ad: 15, mr: 20 },
+    desc: "물리 피해를 입히면 피해량의 40%만큼 체력을 회복합니다."
+  },
+  zekes_herald: {
+    id: "zekes_herald",
+    name: "지크의 전령",
+    icon: "🚩⚡",
+    recipe: ["bf", "belt"],
+    stats: { ad: 15, hp: 150 },
+    desc: "전투 시작 시 동일한 열 좌우 1칸 내 아군의 공격 속도를 +30% 증가시킵니다."
+  },
+  infinity_edge: {
+    id: "infinity_edge",
+    name: "무한의 대검",
+    icon: "🗡️💎",
+    recipe: ["bf", "glove"],
+    stats: { ad: 15, critChance: 0.75, critDamage: 0.10 },
+    desc: "치명타 확률이 75% 증가합니다. 치명타 확률이 100%를 초과하면 초과분 1%당 치명타 피해량이 0.5% 증가합니다."
+  },
+  divine_spat: {
+    id: "divine_spat",
+    name: "신성의 검 (상징)",
+    icon: "✨🗡️",
+    recipe: ["bf", "spatula"],
+    stats: { ad: 15 },
+    grantTrait: "divine",
+    desc: "착용자에게 [신성] 특성을 부여합니다."
+  },
+
+  rapid_firecannon: {
+    id: "rapid_firecannon",
+    name: "고속 연사포",
+    icon: "🎯",
+    recipe: ["bow", "bow"],
+    stats: { as: 0.30 },
+    cannotMiss: true,
+    rangeBonus: 1,
+    desc: "사거리가 1칸 증가하고, 기본 공격이 절대 빗나가지(회피) 않습니다."
+  },
+  guinsoos_rageblade: {
+    id: "guinsoos_rageblade",
+    name: "구인수의 격노검",
+    icon: "⚔️🔥",
+    recipe: ["bow", "rod"],
+    stats: { as: 0.15, ap: 15 },
+    desc: "기본 공격 시 공격 속도가 6%씩 무제한(상한 5.0) 중첩 증가합니다."
+  },
+  statikk_shiv: {
+    id: "statikk_shiv",
+    name: "스태틱의 단검",
+    icon: "⚡🏹",
+    recipe: ["bow", "tear"],
+    stats: { as: 0.15, mana: 15 },
+    desc: "매 3번째 공격마다 번개를 연쇄 방출하여 4명의 적에게 80의 마법 피해를 입힙니다."
+  },
+  titans_resolve: {
+    id: "titans_resolve",
+    name: "거인의 결의",
+    icon: "🗿⚡",
+    recipe: ["bow", "vest"],
+    stats: { as: 0.15, armor: 20 },
+    desc: "공격하거나 피해를 입을 때마다 피해량이 +2%씩 최대 25회 중첩됩니다. 25중첩 시 방어력과 마법 저항력이 +25 증가합니다."
+  },
+  runaans_hurricane: {
+    id: "runaans_hurricane",
+    name: "루난의 허리케인",
+    icon: "🌪️🏹",
+    recipe: ["bow", "cloak"],
+    stats: { as: 0.15, mr: 20 },
+    desc: "기본 공격 시 주변 적 1명에게 탄환을 발사하여 공격력의 70% 피해를 입힙니다."
+  },
+  zzrot_portal: {
+    id: "zzrot_portal",
+    name: "즈롯 차원문",
+    icon: "👾🌀",
+    recipe: ["bow", "belt"],
+    stats: { as: 0.15, hp: 150 },
+    desc: "사망 시 체력 1800의 공허 생명체를 소환하여 주변 적을 도발합니다."
+  },
+  last_whisper: {
+    id: "last_whisper",
+    name: "최후의 속삭임",
+    icon: "🏹💨",
+    recipe: ["bow", "glove"],
+    stats: { as: 0.15, critChance: 0.10, dodge: 0.10 },
+    desc: "치명타 공격 시 대상의 방어력을 3초 동안 70% 감소시킵니다."
+  },
+  duelist_spat: {
+    id: "duelist_spat",
+    name: "결투가의 열정 (상징)",
+    icon: "⚔️🥄",
+    recipe: ["bow", "spatula"],
+    stats: { as: 0.15 },
+    grantTrait: "duelist",
+    desc: "착용자에게 [결투가] 특성을 부여합니다."
+  },
+
+  rabadons_deathcap: {
+    id: "rabadons_deathcap",
+    name: "라바돈의 죽음모자",
+    icon: "🧙‍♂️👑",
+    recipe: ["rod", "rod"],
+    stats: { ap: 70 },
+    desc: "주문력이 70 증가합니다."
+  },
+  ludens_echo: {
+    id: "ludens_echo",
+    name: "루덴의 메아리",
+    icon: "🔮💥",
+    recipe: ["rod", "tear"],
+    stats: { ap: 15, mana: 15 },
+    desc: "스킬 사용 시 대상과 주변 적들에게 180의 마법 피해를 입힙니다."
+  },
+  locket_of_solari: {
+    id: "locket_of_solari",
+    name: "강철의 솔라리 펜던트",
+    icon: "🛡️☀️",
+    recipe: ["rod", "vest"],
+    stats: { ap: 15, armor: 20 },
+    desc: "전투 시작 시 동일한 열 2칸 이내의 아군에게 8초 동안 300의 보호막을 씌웁니다."
+  },
+  ionic_spark: {
+    id: "ionic_spark",
+    name: "이온 충격기",
+    icon: "⚡🧙",
+    recipe: ["rod", "cloak"],
+    stats: { ap: 15, mr: 20 },
+    desc: "2칸 이내 적의 마법 저항력을 40% 감소시키며, 적이 스킬 사용 시 최대 마나의 225% 마법 피해를 입힙니다."
+  },
+  morellonomicon: {
+    id: "morellonomicon",
+    name: "모렐로노미콘",
+    icon: "📖🔥",
+    recipe: ["rod", "belt"],
+    stats: { ap: 15, hp: 150 },
+    desc: "스킬 피해를 입히면 10초간 적 최대 체력의 25% 고정 화상 피해를 입히고 치유량을 50% 감소시킵니다."
+  },
+  jeweled_gauntlet: {
+    id: "jeweled_gauntlet",
+    name: "보석 건틀릿",
+    icon: "🥊💎",
+    recipe: ["rod", "glove"],
+    stats: { ap: 15, critChance: 0.10, dodge: 0.10, critDamage: 0.40 },
+    spellCrit: true,
+    desc: "스킬 피해에 치명타가 적용될 수 있으며, 치명타 피해량이 40% 증가합니다."
+  },
+  cultist_spat: {
+    id: "cultist_spat",
+    name: "광신도의 가면 (상징)",
+    icon: "👁️🥄",
+    recipe: ["rod", "spatula"],
+    stats: { ap: 15 },
+    grantTrait: "cultist",
+    desc: "착용자에게 [광신도] 특성을 부여합니다."
+  },
+
+  blue_buff: {
+    id: "blue_buff",
+    name: "푸른 파수꾼",
+    icon: "💧💙",
+    recipe: ["tear", "tear"],
+    stats: { mana: 30 },
+    desc: "스킬을 시전한 후 마나를 20 회복합니다."
+  },
+  frozen_heart: {
+    id: "frozen_heart",
+    name: "얼어붙은 심장",
+    icon: "❄️💙",
+    recipe: ["tear", "vest"],
+    stats: { mana: 15, armor: 20 },
+    desc: "2칸 이내 적들의 공격 속도를 35% 둔화시킵니다."
+  },
+  chalice_of_power: {
+    id: "chalice_of_power",
+    name: "권능의 성배",
+    icon: "🏆✨",
+    recipe: ["tear", "cloak"],
+    stats: { mana: 15, mr: 20 },
+    desc: "전투 시작 시 동일한 열 좌우 1칸 내 아군에게 주문력 +30을 부여합니다."
+  },
+  redemption: {
+    id: "redemption",
+    name: "구원",
+    icon: "🕊️💚",
+    recipe: ["tear", "belt"],
+    stats: { mana: 15, hp: 150 },
+    desc: "체력이 25% 이하로 떨어지면 2.5초 후 2칸 내 모든 아군의 체력을 800 회복합니다 (전투당 1회)."
+  },
+  hand_of_justice: {
+    id: "hand_of_justice",
+    name: "정의의 손길",
+    icon: "🤲⚖️",
+    recipe: ["tear", "glove"],
+    stats: { mana: 15, critChance: 0.10, dodge: 0.10 },
+    desc: "전투마다 [피해량 +40% 증가] 또는 [모든 피해 흡혈 +40%] 중 하나를 무작위로 획득합니다."
+  },
+  moonlight_spat: {
+    id: "moonlight_spat",
+    name: "달빛의 정수 (상징)",
+    icon: "🌙🥄",
+    recipe: ["tear", "spatula"],
+    stats: { mana: 15 },
+    grantTrait: "moonlight",
+    desc: "착용자에게 [달빛] 특성을 부여합니다."
+  },
+
+  bramble_vest: {
+    id: "bramble_vest",
+    name: "덤불 조끼",
+    icon: "🛡️🌵",
+    recipe: ["vest", "vest"],
+    stats: { armor: 40 },
+    critImmune: true,
+    desc: "받는 치명타 추가 피해를 무효화하고, 기본 공격에 피격 시 주변 적들에게 100의 마법 피해를 입힙니다 (2.5초 재사용 대기시간)."
+  },
+  gargoyle_stoneplate: {
+    id: "gargoyle_stoneplate",
+    name: "가고일 돌갑옷",
+    icon: "🗿🛡️",
+    recipe: ["vest", "cloak"],
+    stats: { armor: 20, mr: 20 },
+    desc: "자신을 공격 대상으로 삼는 적 1명당 방어력과 마법 저항력이 +15씩 증가합니다."
+  },
+  sunfire_cape: {
+    id: "sunfire_cape",
+    name: "태양불꽃 망토",
+    icon: "🔥🧥",
+    recipe: ["vest", "belt"],
+    stats: { armor: 20, hp: 150 },
+    desc: "2초마다 2칸 내 무작위 적 1명에게 10초간 최대 체력의 25% 고정 화상 피해와 50% 치유 감소를 적용합니다."
+  },
+  shroud_of_stillness: {
+    id: "shroud_of_stillness",
+    name: "침묵의 장막",
+    icon: "🟣🛡️",
+    recipe: ["vest", "glove"],
+    stats: { armor: 20, critChance: 0.10, dodge: 0.10 },
+    desc: "전투 시작 시 전방 일직선상의 적들에게 빔을 쏘아 첫 스킬 마나 소모량을 33% 증가시킵니다."
+  },
+  warlord_spat: {
+    id: "warlord_spat",
+    name: "대장군의 깃발 (상징)",
+    icon: "🚩🛡️",
+    recipe: ["vest", "spatula"],
+    stats: { armor: 20 },
+    grantTrait: "warlord",
+    desc: "착용자에게 [대장군] 특성을 부여합니다."
+  },
+
+  dragons_claw: {
+    id: "dragons_claw",
+    name: "용의 발톱",
+    icon: "🐉🛡️",
+    recipe: ["cloak", "cloak"],
+    stats: { mr: 40 },
+    desc: "받는 마법 피해를 60% 감소시킵니다."
+  },
+  zephyr: {
+    id: "zephyr",
+    name: "서풍",
+    icon: "🌪️👟",
+    recipe: ["cloak", "belt"],
+    stats: { mr: 20, hp: 150 },
+    desc: "전투 시작 시 맞은편 대칭 위치의 적 1명을 5초 동안 전장에서 추방합니다 (행동 불가, 타겟 불가)."
+  },
+  quicksilver: {
+    id: "quicksilver",
+    name: "수은",
+    icon: "🔮🧤",
+    recipe: ["cloak", "glove"],
+    stats: { mr: 20, critChance: 0.10, dodge: 0.10 },
+    desc: "전투 시작 후 10초 동안 모든 군중 제어(CC) 효과에 면역이 됩니다."
+  },
+  fortune_spat: {
+    id: "fortune_spat",
+    name: "행운의 주사위 (상징)",
+    icon: "🎲🥄",
+    recipe: ["cloak", "spatula"],
+    stats: { mr: 20 },
+    grantTrait: "fortune",
+    desc: "착용자에게 [행운] 특성을 부여합니다."
+  },
+
+  warmogs_armor: {
+    id: "warmogs_armor",
+    name: "워모그의 갑옷",
+    icon: "💚🥋",
+    recipe: ["belt", "belt"],
+    stats: { hp: 1000 },
+    desc: "체력이 1000 증가합니다."
+  },
+  trap_claw: {
+    id: "trap_claw",
+    name: "덫 발톱",
+    icon: "🪤🥊",
+    recipe: ["belt", "glove"],
+    stats: { hp: 150, critChance: 0.10, dodge: 0.10 },
+    desc: "전투 시작 시 스킬 방어막을 얻습니다. 방어막을 파괴한 적을 4초 동안 기절시킵니다."
+  },
+  the_boss_spat: {
+    id: "the_boss_spat",
+    name: "우두머리의 벨트 (상징)",
+    icon: "💪🥄",
+    recipe: ["belt", "spatula"],
+    stats: { hp: 150 },
+    grantTrait: "theBoss",
+    desc: "착용자에게 [우두머리] 특성을 부여합니다."
+  },
+
+  thiefs_gloves: {
+    id: "thiefs_gloves",
+    name: "도적의 장갑",
+    icon: "🥊🥊",
+    recipe: ["glove", "glove"],
+    stats: { critChance: 0.20, dodge: 0.20 },
+    isThiefsGloves: true,
+    desc: "아이템 슬롯 3칸을 모두 차지합니다. 매 전투 시작 시 무작위 완성 아이템 2개를 임시 장착합니다."
+  },
+  glove_spat: {
+    id: "glove_spat",
+    name: "결투가의 장갑 (상징)",
+    icon: "🥊🥄",
+    recipe: ["glove", "spatula"],
+    stats: { critChance: 0.10, dodge: 0.10 },
+    grantTrait: "duelist",
+    desc: "착용자에게 [결투가] 특성을 부여합니다."
+  },
+  force_of_nature: {
+    id: "force_of_nature",
+    name: "자연의 힘",
+    icon: "👑🥄",
+    recipe: ["spatula", "spatula"],
+    stats: {},
+    teamSize: 1,
+    desc: "팀의 최대 배치 인원 제한이 1명 증가합니다."
+  }
+};
+
+// 기본 아이템 조합 레시피 맵 (알파벳 정렬 키: "itemA+itemB")
+export const ITEM_RECIPES = {};
+Object.values(ITEMS).forEach(item => {
+  if (item.recipe && item.recipe.length === 2) {
+    const key = [...item.recipe].sort().join("+");
+    ITEM_RECIPES[key] = item.id;
+  }
+});
+
+// 도적의 장갑 등에서 롤할 수 있는 완성 아이템 목록 (상징 및 도적의 장갑, 자연의 힘 제외)
+export const CRAFTABLE_ITEMS = Object.keys(ITEMS).filter(id => {
+  const item = ITEMS[id];
+  return !item.isComponent && !item.grantTrait && !item.isThiefsGloves && item.id !== "force_of_nature";
+});
+
