@@ -1009,55 +1009,91 @@ body {
   height: 100% !important;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
+  justify-content: flex-start;
+  gap: 6px;
   background: linear-gradient(135deg, #d97706 0%, #b45309 55%, #78350f 100%);
   border: 1.8px solid #fbbf24;
   border-radius: 12px;
   color: #fffbeb;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: -0.3px;
   box-shadow: 0 4px 16px rgba(217, 119, 6, 0.55), inset 0 1px 1px rgba(255, 255, 255, 0.4);
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-  padding: 0 12px !important;
+  padding: 0 6px 0 10px !important;
   user-select: none;
   white-space: nowrap;
 }
 
-.combat-btn-skip-hint {
-  font-size: 10.5px;
-  font-weight: 800;
-  color: #bae6fd;
-  background: rgba(2, 132, 199, 0.4);
-  border: 1px solid rgba(56, 189, 248, 0.5);
-  border-radius: 6px;
-  padding: 2px 7px;
-  margin-left: auto;
-  letter-spacing: -0.2px;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
-
-.btn-combat-start:hover:not(:disabled) {
+.btn-combat-start:hover:not(.in-combat) {
   transform: translateY(-2px);
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #92400e 100%);
   border-color: #fef08a;
   box-shadow: 0 6px 20px rgba(245, 158, 11, 0.65), inset 0 1px 2px rgba(255, 255, 255, 0.5);
 }
 
-.btn-combat-start:active:not(:disabled) {
+.btn-combat-start.in-combat {
+  background: linear-gradient(135deg, #7c2d12 0%, #451a03 55%, #1e1b4b 100%);
+  border-color: #f97316;
+  color: #fed7aa;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.45);
+}
+
+.btn-combat-start:active {
   transform: translateY(1px);
 }
 
-.btn-combat-start:disabled {
-  background: rgba(30, 41, 59, 0.88);
-  border-color: #475569;
-  color: #94a3b8;
-  box-shadow: none;
-  cursor: not-allowed;
-  transform: none;
+/* 전투 버튼 내부 통합 스킵 버튼 */
+.btn-combat-skip-inside {
+  margin-left: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px !important;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 60%, #075985 100%);
+  border: 1.5px solid #38bdf8;
+  border-radius: 8px;
+  color: #f0f9ff;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  transition: all 0.16s ease;
+  user-select: none;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  z-index: 2;
+}
+
+.btn-combat-skip-inside:hover {
+  transform: scale(1.06);
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 50%, #0369a1 100%);
+  border-color: #bae6fd;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.7), inset 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+.btn-combat-skip-inside:active {
+  transform: scale(0.96);
+}
+
+.btn-combat-skip-inside.combat-active-pulse {
+  animation: pulse-skip-glow 1.2s infinite alternate;
+}
+
+@keyframes pulse-skip-glow {
+  0% {
+    box-shadow: 0 0 6px #38bdf8;
+    border-color: #38bdf8;
+  }
+  100% {
+    box-shadow: 0 0 16px #38bdf8, 0 0 22px rgba(56, 189, 248, 0.6);
+    border-color: #f0f9ff;
+    transform: scale(1.03);
+  }
 }
 
 .combat-btn-icon {

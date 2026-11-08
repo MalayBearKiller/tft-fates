@@ -1144,11 +1144,17 @@ class TFTGame {
     });
     this.dom.startCombatBtn.addEventListener("click", (e) => {
       e.currentTarget.blur(); // 스페이스바가 버튼을 다시 누르지 않도록
-      if (this.phase === "planning") this.startCombat();
+      if (e.target.closest("#btn-skip-combat")) return;
+      if (this.phase === "planning") {
+        this.startCombat();
+      } else if (this.phase === "combat") {
+        this.skipCombat();
+      }
     });
     if (this.dom.skipCombatBtn) {
       this.dom.skipCombatBtn.addEventListener("click", (e) => {
         e.currentTarget.blur();
+        e.stopPropagation();
         this.skipCombat();
       });
     }
@@ -2370,20 +2376,42 @@ class TFTGame {
       this.setPlacingMode(false);
     }
     if (!this.dom.startCombatBtn) return;
+    this.dom.startCombatBtn.classList.toggle("in-combat", isCombat);
     this.dom.startCombatBtn.disabled = isCombat;
-    if (isCombat) {
-      this.dom.startCombatBtn.innerHTML = `
-        <span class="combat-btn-icon">⚔️</span>
-        <span class="combat-btn-text">진행 중...</span>
-        <span class="combat-btn-skip-hint">스킵: S</span>
-      `;
+
+    const textEl = this.dom.startCombatBtn.querySelector(".combat-btn-text");
+    const keyEl = this.dom.startCombatBtn.querySelector(".combat-btn-key");
+    const skipBtn = document.getElementById("btn-skip-combat") || this.dom.skipCombatBtn;
+
+    if (textEl && keyEl && skipBtn) {
+      if (isCombat) {
+        textEl.textContent = "전투 중...";
+        keyEl.style.display = "none";
+        skipBtn.classList.add("combat-active-pulse");
+      } else {
+        textEl.textContent = "전투 시작";
+        keyEl.style.display = "inline-block";
+        keyEl.textContent = "Space";
+        skipBtn.classList.remove("combat-active-pulse");
+      }
     } else {
+      // Elements not found, set innerHTML preserving embedded skip button
       this.dom.startCombatBtn.innerHTML = `
         <span class="combat-btn-icon">⚔️</span>
-        <span class="combat-btn-text">전투 시작</span>
-        <span class="combat-btn-key">Space</span>
-        <span class="combat-btn-skip-hint">스킵: S</span>
+        <span class="combat-btn-text">${isCombat ? "전투 중..." : "전투 시작"}</span>
+        <span class="combat-btn-key" style="${isCombat ? "display:none;" : ""}">${isCombat ? "" : "Space"}</span>
+        <button id="btn-skip-combat" class="btn-combat-skip-inside${isCombat ? " combat-active-pulse" : ""}" title="전투 즉시 스킵 [단축키: S]">
+          <span class="skip-btn-icon">⏩</span>
+          <span class="skip-btn-text">스킵: S</span>
+        </button>
       `;
+      this.dom.skipCombatBtn = document.getElementById("btn-skip-combat");
+      if (this.dom.skipCombatBtn) {
+        this.dom.skipCombatBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.skipCombat();
+        };
+      }
     }
   }
 
@@ -4358,7 +4386,6 @@ class TFTGame {
       if (attacker && attacker.hp > 0 && attacker.deathbladeStacks !== undefined) {
         attacker.deathbladeStacks++;
         attacker.ad += 20;
-        this.spawnDamagePopup(attacker.x, attacker.y - 20, "데스블레이드 +20 AD", "skill");
       }
 
       return amount;
@@ -4649,6 +4676,7 @@ class TFTGame {
   }
 
   spawnDamagePopup(x, y, text, type = "physical", battle = null) {
+    if (typeof text === "string" && text.includes("AD")) return;
     const viewed = this.getCurrentlyViewedBattle();
     if (battle && viewed && battle !== viewed) return;
     if (viewed && viewed.isHeadless) return;

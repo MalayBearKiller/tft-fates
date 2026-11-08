@@ -229,16 +229,15 @@
     <div class="shop-controls level-control-card">
       <!-- 상단 도킹: 전투 지휘 컨트롤 (레벨 카드 상단에 100% 밀착 정렬) -->
       <div class="combat-command-dock">
-        <button id="btn-start-combat" class="btn-combat-start" title="전투를 시작합니다 [단축키: Space] (스킵 단축키: S)">
+        <div id="btn-start-combat" class="btn-combat-start" role="button" tabindex="0" title="전투를 시작합니다 [단축키: Space]">
           <span class="combat-btn-icon">⚔️</span>
           <span class="combat-btn-text">전투 시작</span>
           <span class="combat-btn-key">Space</span>
-          <span class="combat-btn-skip-hint">스킵: S</span>
-        </button>
-        <button id="btn-skip-combat" class="btn-combat-skip" style="display: none !important;" title="전투 애니메이션 없이 결과를 즉시 계산하여 다음 라운드로 진행합니다 [단축키: S]">
-          <span class="combat-btn-icon">⏩</span>
-          <span class="combat-btn-text">스킵</span>
-        </button>
+          <button id="btn-skip-combat" class="btn-combat-skip-inside" title="전투 즉시 스킵 [단축키: S]">
+            <span class="skip-btn-icon">⏩</span>
+            <span class="skip-btn-text">스킵: S</span>
+          </button>
+        </div>
       </div>
 
       <div class="level-deploy-row">

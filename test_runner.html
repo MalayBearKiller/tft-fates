@@ -229,15 +229,15 @@
     <div class="shop-controls level-control-card">
       <!-- 상단 도킹: 전투 지휘 컨트롤 (레벨 카드 상단에 100% 밀착 정렬) -->
       <div class="combat-command-dock">
-        <button id="btn-start-combat" class="btn-combat-start" title="전투를 시작합니다 [단축키: Space]">
+        <div id="btn-start-combat" class="btn-combat-start" role="button" tabindex="0" title="전투를 시작합니다 [단축키: Space]">
           <span class="combat-btn-icon">⚔️</span>
           <span class="combat-btn-text">전투 시작</span>
           <span class="combat-btn-key">Space</span>
-        </button>
-        <button id="btn-skip-combat" class="btn-combat-skip" title="전투 애니메이션 없이 결과를 즉시 계산하여 다음 라운드로 진행합니다">
-          <span class="combat-btn-icon">⏩</span>
-          <span class="combat-btn-text">스킵</span>
-        </button>
+          <button id="btn-skip-combat" class="btn-combat-skip-inside" title="전투 즉시 스킵 [단축키: S]">
+            <span class="skip-btn-icon">⏩</span>
+            <span class="skip-btn-text">스킵: S</span>
+          </button>
+        </div>
       </div>
 
       <div class="level-deploy-row">
@@ -643,10 +643,35 @@
         game.toggleSettingsModal();
         assert(game.dom.settingsModal.style.display === 'none', 'Settings modal toggled to close');
 
-        // Test start combat button dock & label
+        // Test start combat button dock & embedded skip button
         const startBtn = document.getElementById('btn-start-combat');
+        const skipBtn = document.getElementById('btn-skip-combat');
         assert(!!startBtn, 'Combat start button exists');
+        assert(!!skipBtn, 'Skip button exists');
+        assert(startBtn.contains(skipBtn), 'Skip button is located inside combat button');
         assert(startBtn.innerHTML.includes('스킵: S'), 'Combat start button informs shortcut [스킵: S]');
+
+        const sRect = startBtn.getBoundingClientRect();
+        const kRect = skipBtn.getBoundingClientRect();
+        assert(kRect.right <= sRect.right + 5, 'Skip button visually fits inside start button (kRect.right: ' + kRect.right + ', sRect.right: ' + sRect.right + ')');
+
+        // Test setCombatButtonState maintains embedded skip button
+        game.setCombatButtonState(true);
+        assert(startBtn.classList.contains('in-combat'), 'Start button has in-combat class during combat');
+        assert(startBtn.contains(skipBtn), 'Skip button remains inside combat button during combat');
+        assert(startBtn.innerHTML.includes('전투 중...'), 'Button label is 전투 중... during combat');
+        game.setCombatButtonState(false);
+        assert(!startBtn.classList.contains('in-combat'), 'Start button removes in-combat class in planning');
+        assert(startBtn.contains(skipBtn), 'Skip button remains inside combat button in planning');
+        assert(startBtn.innerHTML.includes('전투 시작'), 'Button label is 전투 시작 in planning');
+
+        // Test deathblade kill does NOT spawn +AD popup
+        const testAttacker = { uid: 'atk', x: 100, y: 100, hp: 500, ad: 50, deathbladeStacks: 0 };
+        const testDefender = { uid: 'def', x: 120, y: 100, hp: 0, maxHp: 500, side: 'enemy', champ: { traits: [] } };
+        const popupsBefore = document.querySelectorAll('.damage-popup').length;
+        game.dealDamage(game.battle || { geo: { spacing: 40 }, isHeadless: false }, testAttacker, testDefender, 999, 'physical');
+        const adPopups = Array.from(document.querySelectorAll('.damage-popup')).filter(p => p.textContent.includes('AD'));
+        assert(adPopups.length === 0, 'No +AD popup spawned on Deathblade kill (actual: ' + adPopups.length + ')');
 
         // Test skip shortcut S keydown
         assert(game.phase === 'planning', 'Game in planning phase');
