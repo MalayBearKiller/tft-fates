@@ -93,7 +93,10 @@ function unitTokenInnerHTML(unit) {
     ? `<div class="unit-items-tray">
         ${unit.items.slice(0, 3).map(id => {
           const it = ITEMS[id];
-          return it ? `<span class="unit-item-badge" title="${it.name}">${it.icon}</span>` : '';
+          if (!it) return '';
+          return `<span class="unit-item-badge" title="${it.name}">
+            ${it.image ? `<img class="unit-item-img" src="${it.image}" alt="${it.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"><span class="unit-item-fallback" style="display:none;">${it.icon}</span>` : it.icon}
+          </span>`;
         }).join('')}
        </div>`
     : '';
@@ -474,7 +477,11 @@ class TFTGame {
         const item = ITEMS[itemId];
         const token = document.createElement("div");
         token.className = "item-token";
-        token.textContent = item.icon;
+        if (item.image) {
+          token.innerHTML = `<img class="item-inventory-img" src="${item.image}" alt="${item.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"><span class="item-fallback-icon" style="display:none;">${item.icon}</span>`;
+        } else {
+          token.textContent = item.icon;
+        }
         token.title = `${item.name}\n${item.desc}`;
         token.draggable = (this.phase === "planning");
 
@@ -559,10 +566,13 @@ class TFTGame {
       recipeHtml = `<div class="item-tooltip-recipe">기본 조합 아이템 (다른 기본 아이템과 조합 가능)</div>`;
     } else if (item.recipe) {
       const it1 = ITEMS[item.recipe[0]], it2 = ITEMS[item.recipe[1]];
-      recipeHtml = `<div class="item-tooltip-recipe">조합식: ${it1?.icon || ''} ${it1?.name || ''} + ${it2?.icon || ''} ${it2?.name || ''}</div>`;
+      const it1Icon = it1?.image ? `<img class="recipe-item-img" src="${it1.image}" alt="">` : (it1?.icon || '');
+      const it2Icon = it2?.image ? `<img class="recipe-item-img" src="${it2.image}" alt="">` : (it2?.icon || '');
+      recipeHtml = `<div class="item-tooltip-recipe">조합식: ${it1Icon} ${it1?.name || ''} + ${it2Icon} ${it2?.name || ''}</div>`;
     }
+    const titleIcon = item.image ? `<img class="tooltip-title-img" src="${item.image}" alt="">` : item.icon;
     this.dom.itemTooltip.innerHTML = `
-      <div class="item-tooltip-title">${item.icon} ${item.name}</div>
+      <div class="item-tooltip-title">${titleIcon} ${item.name}</div>
       ${recipeHtml}
       <div class="item-tooltip-desc">${item.desc}</div>
     `;
@@ -4463,7 +4473,7 @@ class TFTGame {
     // 튀어나오는 전리품 황금 구체
     const lootOrb = document.createElement("div");
     lootOrb.className = "minion-loot-drop-orb";
-    lootOrb.innerHTML = `<div class="loot-orb-box">${itemObj.icon}</div>`;
+    lootOrb.innerHTML = `<div class="loot-orb-box">${itemObj.image ? `<img class="loot-orb-img" src="${itemObj.image}" alt="">` : itemObj.icon}</div>`;
     lootOrb.style.left = `${startX}px`;
     lootOrb.style.top = `${startY}px`;
     document.body.appendChild(lootOrb);
@@ -4975,7 +4985,9 @@ class TFTGame {
             const it = ITEMS[itemId];
             return `
             <div class="item-choice-card" data-idx="${idx}" style="flex: 1; background: rgba(30, 41, 59, 0.9); border: 2px solid #eab308; border-radius: 12px; padding: 16px 12px; text-align: center; cursor: pointer; transition: transform 0.2s, background 0.2s;">
-              <div style="font-size: 38px; margin-bottom: 8px;">${it ? it.icon : '🗡️'}</div>
+              <div style="width: 52px; height: 52px; margin: 0 auto 8px auto; display: flex; align-items: center; justify-content: center;">
+                ${it?.image ? `<img src="${it.image}" alt="${it.name}" style="width: 48px; height: 48px; border-radius: 8px; border: 1.5px solid #fbbf24; object-fit: cover;">` : `<span style="font-size: 38px;">${it ? it.icon : '🗡️'}</span>`}
+              </div>
               <div style="font-weight: 800; font-size: 14px; color: #f8fafc; margin-bottom: 6px;">${it ? it.name : itemId}</div>
               <div style="font-size: 11px; color: #cbd5e1; line-height: 1.4;">${it ? it.desc : ''}</div>
             </div>

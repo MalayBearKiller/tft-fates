@@ -792,6 +792,7 @@ export const ITEMS = {
   // --- 기본 아이템 (9종) ---
   bf: {
     id: "bf",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_BFSword.png",
     name: "B.F. 대검",
     icon: "🗡️",
     isComponent: true,
@@ -800,6 +801,7 @@ export const ITEMS = {
   },
   bow: {
     id: "bow",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_RecurveBow.png",
     name: "곡궁",
     icon: "🏹",
     isComponent: true,
@@ -808,6 +810,7 @@ export const ITEMS = {
   },
   rod: {
     id: "rod",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_NeedlesslyLargeRod.png",
     name: "쓸데없이 큰 지팡이",
     icon: "🪄",
     isComponent: true,
@@ -816,6 +819,7 @@ export const ITEMS = {
   },
   tear: {
     id: "tear",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_TearOfTheGoddess.png",
     name: "여신의 눈물",
     icon: "💧",
     isComponent: true,
@@ -824,6 +828,7 @@ export const ITEMS = {
   },
   vest: {
     id: "vest",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_ChainVest.png",
     name: "쇠사슬 조끼",
     icon: "🛡️",
     isComponent: true,
@@ -832,6 +837,7 @@ export const ITEMS = {
   },
   cloak: {
     id: "cloak",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_NegatronCloak.png",
     name: "음전자 망토",
     icon: "🧥",
     isComponent: true,
@@ -840,6 +846,7 @@ export const ITEMS = {
   },
   belt: {
     id: "belt",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_GiantsBelt.png",
     name: "거인의 허리띠",
     icon: "🥋",
     isComponent: true,
@@ -848,6 +855,7 @@ export const ITEMS = {
   },
   glove: {
     id: "glove",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_SparringGloves.png",
     name: "연습용 장갑",
     icon: "🥊",
     isComponent: true,
@@ -856,6 +864,7 @@ export const ITEMS = {
   },
   spatula: {
     id: "spatula",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Spatula.png",
     name: "뒤집개",
     icon: "🥄",
     isComponent: true,
@@ -866,6 +875,7 @@ export const ITEMS = {
   // --- 완성 아이템 (45종) ---
   deathblade: {
     id: "deathblade",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Deathblade.png",
     name: "죽음의 검",
     icon: "⚔️",
     recipe: ["bf", "bf"],
@@ -874,6 +884,7 @@ export const ITEMS = {
   },
   giant_slayer: {
     id: "giant_slayer",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_MadredsBloodrazor.png",
     name: "거인 학살자",
     icon: "🏹💥",
     recipe: ["bf", "bow"],
@@ -882,6 +893,7 @@ export const ITEMS = {
   },
   hextech_gunblade: {
     id: "hextech_gunblade",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_HextechGunblade.png",
     name: "마법공학 총검",
     icon: "🔫✨",
     recipe: ["bf", "rod"],
@@ -890,6 +902,7 @@ export const ITEMS = {
   },
   spear_of_shojin: {
     id: "spear_of_shojin",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_SpearOfShojin.png",
     name: "쇼진의 창",
     icon: "🔱",
     recipe: ["bf", "tear"],
@@ -898,6 +911,7 @@ export const ITEMS = {
   },
   guardian_angel: {
     id: "guardian_angel",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_GuardianAngel.png",
     name: "수호천사",
     icon: "👼",
     recipe: ["bf", "vest"],
@@ -906,6 +920,7 @@ export const ITEMS = {
   },
   bloodthirster: {
     id: "bloodthirster",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Bloodthirster.png",
     name: "피바라기",
     icon: "🩸🗡️",
     recipe: ["bf", "cloak"],
@@ -914,6 +929,7 @@ export const ITEMS = {
   },
   zekes_herald: {
     id: "zekes_herald",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_ZekesHerald.png",
     name: "지크의 전령",
     icon: "🚩⚡",
     recipe: ["bf", "belt"],
@@ -922,6 +938,7 @@ export const ITEMS = {
   },
   infinity_edge: {
     id: "infinity_edge",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_InfinityEdge.png",
     name: "무한의 대검",
     icon: "🗡️💎",
     recipe: ["bf", "glove"],
@@ -930,6 +947,7 @@ export const ITEMS = {
   },
   divine_spat: {
     id: "divine_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set17/tft17_emblem_arbiter.png",
     name: "신성의 검 (상징)",
     icon: "✨🗡️",
     recipe: ["bf", "spatula"],
@@ -940,6 +958,7 @@ export const ITEMS = {
 
   rapid_firecannon: {
     id: "rapid_firecannon",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_RapidFireCannon.png",
     name: "고속 연사포",
     icon: "🎯",
     recipe: ["bow", "bow"],
@@ -950,6 +969,7 @@ export const ITEMS = {
   },
   guinsoos_rageblade: {
     id: "guinsoos_rageblade",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_GuinsoosRageblade.png",
     name: "구인수의 격노검",
     icon: "⚔️🔥",
     recipe: ["bow", "rod"],
@@ -958,6 +978,7 @@ export const ITEMS = {
   },
   statikk_shiv: {
     id: "statikk_shiv",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_StatikkShiv.png",
     name: "스태틱의 단검",
     icon: "⚡🏹",
     recipe: ["bow", "tear"],
@@ -966,6 +987,7 @@ export const ITEMS = {
   },
   titans_resolve: {
     id: "titans_resolve",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_TitansResolve.png",
     name: "거인의 결의",
     icon: "🗿⚡",
     recipe: ["bow", "vest"],
@@ -974,6 +996,7 @@ export const ITEMS = {
   },
   runaans_hurricane: {
     id: "runaans_hurricane",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_RunaansHurricane.png",
     name: "루난의 허리케인",
     icon: "🌪️🏹",
     recipe: ["bow", "cloak"],
@@ -982,6 +1005,7 @@ export const ITEMS = {
   },
   zzrot_portal: {
     id: "zzrot_portal",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_TitanicHydra.png",
     name: "즈롯 차원문",
     icon: "👾🌀",
     recipe: ["bow", "belt"],
@@ -990,6 +1014,7 @@ export const ITEMS = {
   },
   last_whisper: {
     id: "last_whisper",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_LastWhisper.png",
     name: "최후의 속삭임",
     icon: "🏹💨",
     recipe: ["bow", "glove"],
@@ -998,6 +1023,7 @@ export const ITEMS = {
   },
   duelist_spat: {
     id: "duelist_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set15/tft15_emblem_duelist.png",
     name: "결투가의 열정 (상징)",
     icon: "⚔️🥄",
     recipe: ["bow", "spatula"],
@@ -1008,6 +1034,7 @@ export const ITEMS = {
 
   rabadons_deathcap: {
     id: "rabadons_deathcap",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_RabadonsDeathcap.png",
     name: "라바돈의 죽음모자",
     icon: "🧙‍♂️👑",
     recipe: ["rod", "rod"],
@@ -1016,6 +1043,7 @@ export const ITEMS = {
   },
   ludens_echo: {
     id: "ludens_echo",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_ArchangelsStaff.png",
     name: "루덴의 메아리",
     icon: "🔮💥",
     recipe: ["rod", "tear"],
@@ -1024,6 +1052,7 @@ export const ITEMS = {
   },
   locket_of_solari: {
     id: "locket_of_solari",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_LocketOfTheIronSolari.png",
     name: "강철의 솔라리 펜던트",
     icon: "🛡️☀️",
     recipe: ["rod", "vest"],
@@ -1032,6 +1061,7 @@ export const ITEMS = {
   },
   ionic_spark: {
     id: "ionic_spark",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_IonicSpark.png",
     name: "이온 충격기",
     icon: "⚡🧙",
     recipe: ["rod", "cloak"],
@@ -1040,6 +1070,7 @@ export const ITEMS = {
   },
   morellonomicon: {
     id: "morellonomicon",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Morellonomicon.png",
     name: "모렐로노미콘",
     icon: "📖🔥",
     recipe: ["rod", "belt"],
@@ -1048,6 +1079,7 @@ export const ITEMS = {
   },
   jeweled_gauntlet: {
     id: "jeweled_gauntlet",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_JeweledGauntlet.png",
     name: "보석 건틀릿",
     icon: "🥊💎",
     recipe: ["rod", "glove"],
@@ -1057,6 +1089,7 @@ export const ITEMS = {
   },
   cultist_spat: {
     id: "cultist_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set18/tft18_emblem_coven.tft_set18.png",
     name: "광신도의 가면 (상징)",
     icon: "👁️🥄",
     recipe: ["rod", "spatula"],
@@ -1067,6 +1100,7 @@ export const ITEMS = {
 
   blue_buff: {
     id: "blue_buff",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_BlueBuff.png",
     name: "푸른 파수꾼",
     icon: "💧💙",
     recipe: ["tear", "tear"],
@@ -1075,6 +1109,7 @@ export const ITEMS = {
   },
   frozen_heart: {
     id: "frozen_heart",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_FrozenHeart.png",
     name: "얼어붙은 심장",
     icon: "❄️💙",
     recipe: ["tear", "vest"],
@@ -1083,6 +1118,7 @@ export const ITEMS = {
   },
   chalice_of_power: {
     id: "chalice_of_power",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Chalice.png",
     name: "권능의 성배",
     icon: "🏆✨",
     recipe: ["tear", "cloak"],
@@ -1091,6 +1127,7 @@ export const ITEMS = {
   },
   redemption: {
     id: "redemption",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Redemption.png",
     name: "구원",
     icon: "🕊️💚",
     recipe: ["tear", "belt"],
@@ -1099,6 +1136,7 @@ export const ITEMS = {
   },
   hand_of_justice: {
     id: "hand_of_justice",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_UnstableConcoction.png",
     name: "정의의 손길",
     icon: "🤲⚖️",
     recipe: ["tear", "glove"],
@@ -1107,6 +1145,7 @@ export const ITEMS = {
   },
   moonlight_spat: {
     id: "moonlight_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set18/tft18_emblem_lunar.tft_set18.png",
     name: "달빛의 정수 (상징)",
     icon: "🌙🥄",
     recipe: ["tear", "spatula"],
@@ -1117,6 +1156,7 @@ export const ITEMS = {
 
   bramble_vest: {
     id: "bramble_vest",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_BrambleVest.png",
     name: "덤불 조끼",
     icon: "🛡️🌵",
     recipe: ["vest", "vest"],
@@ -1126,6 +1166,7 @@ export const ITEMS = {
   },
   gargoyle_stoneplate: {
     id: "gargoyle_stoneplate",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_GargoyleStoneplate.png",
     name: "가고일 돌갑옷",
     icon: "🗿🛡️",
     recipe: ["vest", "cloak"],
@@ -1134,6 +1175,7 @@ export const ITEMS = {
   },
   sunfire_cape: {
     id: "sunfire_cape",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_RedBuff.png",
     name: "태양불꽃 망토",
     icon: "🔥🧥",
     recipe: ["vest", "belt"],
@@ -1142,6 +1184,7 @@ export const ITEMS = {
   },
   shroud_of_stillness: {
     id: "shroud_of_stillness",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Shroud.png",
     name: "침묵의 장막",
     icon: "🟣🛡️",
     recipe: ["vest", "glove"],
@@ -1150,6 +1193,7 @@ export const ITEMS = {
   },
   warlord_spat: {
     id: "warlord_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set16/tft16_emblem_demacia.png",
     name: "대장군의 깃발 (상징)",
     icon: "🚩🛡️",
     recipe: ["vest", "spatula"],
@@ -1160,6 +1204,7 @@ export const ITEMS = {
 
   dragons_claw: {
     id: "dragons_claw",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_DragonsClaw.png",
     name: "용의 발톱",
     icon: "🐉🛡️",
     recipe: ["cloak", "cloak"],
@@ -1168,6 +1213,7 @@ export const ITEMS = {
   },
   zephyr: {
     id: "zephyr",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Zephyr.png",
     name: "서풍",
     icon: "🌪️👟",
     recipe: ["cloak", "belt"],
@@ -1176,6 +1222,7 @@ export const ITEMS = {
   },
   quicksilver: {
     id: "quicksilver",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_Quicksilver.png",
     name: "수은",
     icon: "🔮🧤",
     recipe: ["cloak", "glove"],
@@ -1184,6 +1231,7 @@ export const ITEMS = {
   },
   fortune_spat: {
     id: "fortune_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set15/tft15_emblem_crystalgambit.png",
     name: "행운의 주사위 (상징)",
     icon: "🎲🥄",
     recipe: ["cloak", "spatula"],
@@ -1194,6 +1242,7 @@ export const ITEMS = {
 
   warmogs_armor: {
     id: "warmogs_armor",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_WarmogsArmor.png",
     name: "워모그의 갑옷",
     icon: "💚🥋",
     recipe: ["belt", "belt"],
@@ -1202,6 +1251,7 @@ export const ITEMS = {
   },
   trap_claw: {
     id: "trap_claw",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT5_Item_TrapClawRadiant.png",
     name: "덫 발톱",
     icon: "🪤🥊",
     recipe: ["belt", "glove"],
@@ -1210,6 +1260,7 @@ export const ITEMS = {
   },
   the_boss_spat: {
     id: "the_boss_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set15/tft15_emblem_heavyweight.png",
     name: "우두머리의 벨트 (상징)",
     icon: "💪🥄",
     recipe: ["belt", "spatula"],
@@ -1220,6 +1271,7 @@ export const ITEMS = {
 
   thiefs_gloves: {
     id: "thiefs_gloves",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_ThiefsGloves.png",
     name: "도적의 장갑",
     icon: "🥊🥊",
     recipe: ["glove", "glove"],
@@ -1229,6 +1281,7 @@ export const ITEMS = {
   },
   glove_spat: {
     id: "glove_spat",
+    image: "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/maps/particles/tft/item_icons/traits/spatula/set15/tft15_emblem_duelist.png",
     name: "결투가의 장갑 (상징)",
     icon: "🥊🥄",
     recipe: ["glove", "spatula"],
@@ -1238,6 +1291,7 @@ export const ITEMS = {
   },
   force_of_nature: {
     id: "force_of_nature",
+    image: "https://ddragon.leagueoflegends.com/cdn/13.24.1/img/tft-item/TFT_Item_ForceOfNature.png",
     name: "자연의 힘",
     icon: "👑🥄",
     recipe: ["spatula", "spatula"],

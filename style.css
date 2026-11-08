@@ -648,6 +648,56 @@ body {
   cursor: grab;
   user-select: none;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 2px;
+}
+
+.item-inventory-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+  pointer-events: none;
+  display: block;
+}
+
+.unit-item-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.recipe-item-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #fbbf24;
+  vertical-align: middle;
+  margin: 0 3px;
+  display: inline-block;
+}
+
+.tooltip-title-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1.5px solid #fbbf24;
+  vertical-align: middle;
+  margin-right: 6px;
+  display: inline-block;
+}
+
+.loot-orb-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1.5px solid #fbbf24;
+  object-fit: cover;
+  display: block;
 }
 
 .item-token:hover {

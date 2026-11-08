@@ -458,6 +458,10 @@
         assert(tgBattleUnit.items[1] !== 'thiefs_gloves' && tgBattleUnit.items[2] !== 'thiefs_gloves', 'Rolled items are valid completed items');
 
         // TEST 5: Item equip, combining on unit, 3 items max limit
+        const allItemsList = Object.values(tftData.ITEMS);
+        assert(allItemsList.length === 54, 'Exactly 54 items defined');
+        assert(allItemsList.every(it => typeof it.image === 'string' && it.image.startsWith('http')), 'All 54 items have valid Riot DataDragon/CommunityDragon image URLs');
+
         const testU = {
           uid: 'test_u',
           champ: tftData.CHAMPIONS[0],
@@ -471,9 +475,17 @@
         };
         game.bench[0] = testU;
         game.player.itemInventory = ['bf', 'bow', 'rod', 'tear'];
+        game.renderItemInventory();
+        const invImg = document.querySelector('.item-inventory-img');
+        assert(!!invImg && invImg.src.includes('TFT_Item_BFSword'), 'Inventory renders official TFT item image');
+
         game.equipItemToUnit('bf', testU, 0);
         assert(testU.items.length === 1 && testU.items[0] === 'bf', 'Equipped BF Sword');
         assert(game.player.itemInventory.length === 3, 'Item consumed from inventory');
+
+        game.renderUnits();
+        const badgeImg = document.querySelector('.unit-item-img');
+        assert(!!badgeImg && badgeImg.src.includes('TFT_Item_BFSword'), 'Unit token displays official TFT item artwork');
 
         // Equip bow -> Auto-combines into giant_slayer!
         game.equipItemToUnit('bow', testU, 0);
