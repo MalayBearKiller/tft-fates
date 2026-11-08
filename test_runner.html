@@ -105,7 +105,7 @@
       </div>
     </div>
 
-    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 초기화 (깔끔한 컴팩트 캡슐) -->
+    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 설정 + 초기화 (깔끔한 컴팩트 캡슐) -->
     <div class="hud-section hud-right">
       <div id="bgm-expandable-box" class="bgm-expandable-box" title="BGM 볼륨 설정 (클릭/호버 시 확장, 단축키: B)">
         <button id="btn-bgm-mute" class="bgm-mute-btn" title="음소거 토글 [B]">🔊</button>
@@ -114,6 +114,7 @@
           <span id="bgm-vol-text" class="bgm-vol-text">35%</span>
         </div>
       </div>
+      <button id="btn-open-settings" class="btn-action btn-settings" title="게임 설정 열기 (단축키: O 또는 Esc)">⚙️ 설정</button>
       <button id="btn-reset-game" class="btn-action btn-reset" title="게임을 처음 상태(1-1)로 완전히 초기화">🔄 초기화</button>
     </div>
   </header>
@@ -308,6 +309,28 @@
       </div>
     </div>
   </footer>
+
+  <!-- 게임 설정 모달 -->
+  <div id="settings-modal" class="settings-modal" style="display: none;">
+    <div class="modal-content settings-modal-content">
+      <div class="settings-modal-header">
+        <h2 class="settings-title">⚙️ 게임 설정</h2>
+        <button id="btn-close-settings-x" class="settings-close-x" title="닫기 (Esc 또는 O)">✕</button>
+      </div>
+      <div class="settings-body">
+        <button id="btn-sfx-mute-toggle" class="settings-mute-btn">🔊</button>
+        <input type="range" id="settings-sfx-volume" class="settings-slider" min="0" max="1" step="0.01" value="1.0">
+        <span id="settings-sfx-vol-text" class="settings-vol-text">100%</span>
+        <button id="btn-bgm-modal-mute-toggle" class="settings-mute-btn">🔊</button>
+        <input type="range" id="settings-bgm-volume" class="settings-slider" min="0" max="1" step="0.01" value="0.35">
+        <span id="settings-bgm-vol-text" class="settings-vol-text">35%</span>
+        <button id="btn-master-mute-toggle" class="btn-action settings-toggle-btn">음소거 OFF</button>
+      </div>
+      <div class="settings-modal-footer">
+        <button id="btn-close-settings" class="btn-action btn-settings-confirm">확인 및 닫기</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 연출 오버레이 (갈리오 강림 등) -->
   <div id="overlay-container"></div>
@@ -590,6 +613,40 @@
           }
         }
         assert(!exhaustedDianaFound, 'Exhausted champion never rolls in shop');
+        game.resetGame();
+
+        // TEST 14: Settings Modal & Audio SFX Control & Skip Shortcut
+        assert(typeof sound.setSFXVolume === 'function', 'sound.setSFXVolume exists');
+        assert(typeof sound.toggleSFXMute === 'function', 'sound.toggleSFXMute exists');
+        assert(typeof sound.toggleMasterMute === 'function', 'sound.toggleMasterMute exists');
+
+        sound.setSFXVolume(0.5);
+        assert(sound.sfxVolume === 0.5, 'SFX volume set to 0.5');
+        const sfxMutedNow = sound.toggleSFXMute();
+        assert(sfxMutedNow === true && sound.sfxMuted === true, 'SFX is muted');
+        sound.toggleSFXMute();
+        assert(sound.sfxMuted === false, 'SFX unmuted');
+
+        assert(!!game.dom.settingsModal, 'Settings modal element exists in DOM');
+        game.openSettingsModal();
+        assert(game.dom.settingsModal.style.display === 'flex', 'Settings modal opened with display: flex');
+        game.closeSettingsModal();
+        assert(game.dom.settingsModal.style.display === 'none', 'Settings modal closed with display: none');
+        game.toggleSettingsModal();
+        assert(game.dom.settingsModal.style.display === 'flex', 'Settings modal toggled to open');
+        game.toggleSettingsModal();
+        assert(game.dom.settingsModal.style.display === 'none', 'Settings modal toggled to close');
+
+        // Test start combat button dock & label
+        const startBtn = document.getElementById('btn-start-combat');
+        assert(!!startBtn, 'Combat start button exists');
+        assert(startBtn.innerHTML.includes('스킵: S'), 'Combat start button informs shortcut [스킵: S]');
+
+        // Test skip shortcut S keydown
+        assert(game.phase === 'planning', 'Game in planning phase');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'S' }));
+        assert(game.roundIdx >= 1, 'Pressing S immediately skips combat to next round: round ' + game.roundIdx);
+
         game.resetGame();
 
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';

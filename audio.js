@@ -7,10 +7,17 @@ class SoundSystem {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.sfxVolume = 1.0;
+    this.sfxMuted = false;
+    this.lastNonZeroSFXVolume = 1.0;
     this.bgmPlaying = false;
     this.bgmTimer = null;
+    this.bgmVolume = 0.35;
+    this.lastNonZeroVolume = 0.35;
     this.masterGain = null;
+    this.sfxGain = null;
     this.noiseBuffer = null;
+    this.initSFX();
   }
 
   init() {
@@ -19,14 +26,24 @@ class SoundSystem {
       if (AudioCtx) {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(0.75, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
+
+        this.sfxGain = this.ctx.createGain();
+        const effectiveSFX = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+        this.sfxGain.gain.setValueAtTime(effectiveSFX, this.ctx.currentTime);
+        this.sfxGain.connect(this.masterGain);
+
         this.createNoiseBuffer();
       }
     }
     if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume();
     }
+  }
+
+  getSFXDestination() {
+    return this.sfxGain || this.masterGain;
   }
 
   // 타격감, 카드 셔플, 폭발 연출을 위한 1초 노이즈 버퍼 생성 (메모리 재활용)
@@ -43,7 +60,7 @@ class SoundSystem {
 
   // 1. 묵직하고 찰진 평타 물리 타격음 (어택 트랜지언트 크런치 + 묵직한 서브 바디 쿵)
   playAttack() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -66,7 +83,7 @@ class SoundSystem {
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
-      noiseGain.connect(this.masterGain);
+      noiseGain.connect(this.getSFXDestination());
 
       noise.start(t);
       noise.stop(t + 0.08);
@@ -83,7 +100,7 @@ class SoundSystem {
     bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
 
     bodyOsc.connect(bodyGain);
-    bodyGain.connect(this.masterGain);
+    bodyGain.connect(this.getSFXDestination());
 
     bodyOsc.start(t);
     bodyOsc.stop(t + 0.12);
@@ -91,7 +108,7 @@ class SoundSystem {
 
   // 2. 상점 리롤 (D키): 덱 카드를 촤라락 섞는 쾌감 있는 셔플 사운드
   playReroll() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -116,7 +133,7 @@ class SoundSystem {
 
         cardNoise.connect(cFilter);
         cFilter.connect(cGain);
-        cGain.connect(this.masterGain);
+        cGain.connect(this.getSFXDestination());
 
         cardNoise.start(pt);
         cardNoise.stop(pt + 0.05);
@@ -135,7 +152,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08 + idx * 0.025 + 0.18);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + 0.08 + idx * 0.025);
       osc.stop(t + 0.08 + idx * 0.025 + 0.2);
@@ -144,7 +161,7 @@ class SoundSystem {
 
   // 3. 기물 구매: 짤랑이는 고급 크리스탈 골드 코인 사운드 (진짜 동전 충돌 하모닉스)
   playBuy() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -162,7 +179,7 @@ class SoundSystem {
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
       click.connect(f);
       f.connect(g);
-      g.connect(this.masterGain);
+      g.connect(this.getSFXDestination());
       click.start(t);
       click.stop(t + 0.035);
     }
@@ -186,7 +203,7 @@ class SoundSystem {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + idx * 0.02);
       osc.stop(t + idx * 0.02 + 0.4);
@@ -195,7 +212,7 @@ class SoundSystem {
 
   // 4. 판매 사운드: 주머니로 골드가 회수되는 묵직한 금화음
   playSell() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -214,7 +231,7 @@ class SoundSystem {
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
       swoosh.connect(f);
       f.connect(g);
-      g.connect(this.masterGain);
+      g.connect(this.getSFXDestination());
       swoosh.start(t);
       swoosh.stop(t + 0.19);
     }
@@ -229,7 +246,7 @@ class SoundSystem {
       gain.gain.setValueAtTime(0.1, t + idx * 0.03);
       gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.03 + 0.15);
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
       osc.start(t + idx * 0.03);
       osc.stop(t + idx * 0.03 + 0.16);
     });
@@ -237,7 +254,7 @@ class SoundSystem {
 
   // 5. 초대형 레벨업 사운드 (808 서브 베이스 쿵 + 브라스 팡파르 + 마법 라이징)
   playLevelUp() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -252,7 +269,7 @@ class SoundSystem {
     subGain.gain.setValueAtTime(0.5, t);
     subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
     sub.connect(subGain);
-    subGain.connect(this.masterGain);
+    subGain.connect(this.getSFXDestination());
     sub.start(t);
     sub.stop(t + 0.7);
 
@@ -270,7 +287,7 @@ class SoundSystem {
       rg.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
       rise.connect(rf);
       rf.connect(rg);
-      rg.connect(this.masterGain);
+      rg.connect(this.getSFXDestination());
       rise.start(t);
       rise.stop(t + 0.48);
     }
@@ -287,7 +304,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.04 + 0.6);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.04);
       osc.stop(t + i * 0.04 + 0.65);
@@ -296,7 +313,7 @@ class SoundSystem {
 
   // 6. 챔피언 합성 / 진급 (2성 / 3성 / 4성) - 황금빛 영광의 벨 & 파워업
   playCombine(star = 2) {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -313,7 +330,7 @@ class SoundSystem {
     subGain.gain.setValueAtTime(star >= 3 ? 0.35 : 0.22, t);
     subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
     sub.connect(subGain);
-    subGain.connect(this.masterGain);
+    subGain.connect(this.getSFXDestination());
     sub.start(t);
     sub.stop(t + 0.5);
 
@@ -328,7 +345,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.55);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.06);
       osc.stop(t + i * 0.06 + 0.6);
@@ -337,7 +354,7 @@ class SoundSystem {
 
   // 7. 스킬 사운드 (검기 슬래시, 거대 강타, 마법 폭발, 탄환 저격 등)
   playSkillSound(type = "default") {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -357,7 +374,7 @@ class SoundSystem {
         cg.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
         crash.connect(cf);
         cf.connect(cg);
-        cg.connect(this.masterGain);
+        cg.connect(this.getSFXDestination());
         crash.start(t);
         crash.stop(t + 0.85);
       }
@@ -370,7 +387,7 @@ class SoundSystem {
       subG.gain.setValueAtTime(0.55, t);
       subG.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
       sub.connect(subG);
-      subG.connect(this.masterGain);
+      subG.connect(this.getSFXDestination());
       sub.start(t);
       sub.stop(t + 0.9);
 
@@ -389,7 +406,7 @@ class SoundSystem {
         sg.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
         slash.connect(sf);
         sf.connect(sg);
-        sg.connect(this.masterGain);
+        sg.connect(this.getSFXDestination());
         slash.start(t);
         slash.stop(t + 0.16);
       }
@@ -402,7 +419,7 @@ class SoundSystem {
       ringG.gain.setValueAtTime(0.2, t);
       ringG.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
       ring.connect(ringG);
-      ringG.connect(this.masterGain);
+      ringG.connect(this.getSFXDestination());
       ring.start(t);
       ring.stop(t + 0.15);
 
@@ -425,7 +442,7 @@ class SoundSystem {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t);
       osc.stop(t + 0.3);
@@ -434,7 +451,7 @@ class SoundSystem {
 
   // 8. 짧은 단음 (UI 클릭/배치 피드백)
   playTone(freq = 440, type = "sine", volume = 0.1, duration = 0.08) {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -446,14 +463,14 @@ class SoundSystem {
     gain.gain.setValueAtTime(volume, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
     osc.connect(gain);
-    gain.connect(this.masterGain);
+    gain.connect(this.getSFXDestination());
     osc.start(t);
     osc.stop(t + duration + 0.02);
   }
 
   // 9. 승리 사운드 (웅장한 승리 팡파르)
   playVictory() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -469,7 +486,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.65);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.09);
       osc.stop(t + i * 0.09 + 0.7);
@@ -478,7 +495,7 @@ class SoundSystem {
 
   // 10. 패배 사운드 (묵직한 디미니쉬드)
   playDefeat() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -494,10 +511,85 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.5);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
       osc.start(t + i * 0.12);
       osc.stop(t + i * 0.12 + 0.55);
     });
+  }
+
+  // 효과음 (SFX) 볼륨 및 음소거 제어
+  initSFX() {
+    let savedVol = 1.0;
+    let savedMute = false;
+    let savedMasterMute = false;
+    try {
+      const stored = localStorage.getItem("tft_sfx_volume");
+      if (stored !== null) savedVol = parseFloat(stored);
+      const storedMute = localStorage.getItem("tft_sfx_muted");
+      if (storedMute !== null) savedMute = storedMute === "true";
+      const storedMaster = localStorage.getItem("tft_master_muted");
+      if (storedMaster !== null) savedMasterMute = storedMaster === "true";
+    } catch (e) {}
+
+    this.sfxVolume = isNaN(savedVol) ? 1.0 : Math.max(0, Math.min(1, savedVol));
+    this.sfxMuted = !!savedMute;
+    this.muted = !!savedMasterMute;
+    this.lastNonZeroSFXVolume = this.sfxVolume > 0 ? this.sfxVolume : 1.0;
+  }
+
+  setSFXVolume(val) {
+    const num = Math.max(0, Math.min(1, parseFloat(val) || 0));
+    this.sfxVolume = num;
+    if (num > 0) {
+      this.lastNonZeroSFXVolume = num;
+      this.sfxMuted = false;
+    }
+    try {
+      localStorage.setItem("tft_sfx_volume", num);
+      localStorage.setItem("tft_sfx_muted", this.sfxMuted);
+    } catch (e) {}
+
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+  }
+
+  toggleSFXMute() {
+    if (!this.sfxMuted && this.sfxVolume > 0) {
+      this.sfxMuted = true;
+    } else {
+      this.sfxMuted = false;
+      if (this.sfxVolume === 0) {
+        this.sfxVolume = this.lastNonZeroSFXVolume || 1.0;
+      }
+    }
+    try {
+      localStorage.setItem("tft_sfx_volume", this.sfxVolume);
+      localStorage.setItem("tft_sfx_muted", this.sfxMuted);
+    } catch (e) {}
+
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+    return this.sfxMuted;
+  }
+
+  toggleMasterMute() {
+    this.muted = !this.muted;
+    try {
+      localStorage.setItem("tft_master_muted", this.muted);
+    } catch (e) {}
+
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime);
+    }
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+    return this.muted;
   }
 
   // 11. 은은한 롤토체스 운명 테마 BGM (사용자가 극찬한 신비로운 앰비언스 패드)

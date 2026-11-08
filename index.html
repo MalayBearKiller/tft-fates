@@ -105,7 +105,7 @@
       </div>
     </div>
 
-    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 초기화 (깔끔한 컴팩트 캡슐) -->
+    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 설정 + 초기화 (깔끔한 컴팩트 캡슐) -->
     <div class="hud-section hud-right">
       <div id="bgm-expandable-box" class="bgm-expandable-box" title="BGM 볼륨 설정 (클릭/호버 시 확장, 단축키: B)">
         <button id="btn-bgm-mute" class="bgm-mute-btn" title="음소거 토글 [B]">🔊</button>
@@ -114,6 +114,7 @@
           <span id="bgm-vol-text" class="bgm-vol-text">35%</span>
         </div>
       </div>
+      <button id="btn-open-settings" class="btn-action btn-settings" title="게임 설정 열기 (단축키: O 또는 Esc)">⚙️ 설정</button>
       <button id="btn-reset-game" class="btn-action btn-reset" title="게임을 처음 상태(1-1)로 완전히 초기화">🔄 초기화</button>
     </div>
   </header>
@@ -222,12 +223,13 @@
     <div class="shop-controls level-control-card">
       <!-- 상단 도킹: 전투 지휘 컨트롤 (레벨 카드 상단에 100% 밀착 정렬) -->
       <div class="combat-command-dock">
-        <button id="btn-start-combat" class="btn-combat-start" title="전투를 시작합니다 [단축키: Space]">
+        <button id="btn-start-combat" class="btn-combat-start" title="전투를 시작합니다 [단축키: Space] (스킵 단축키: S)">
           <span class="combat-btn-icon">⚔️</span>
           <span class="combat-btn-text">전투 시작</span>
           <span class="combat-btn-key">Space</span>
+          <span class="combat-btn-skip-hint">스킵: S</span>
         </button>
-        <button id="btn-skip-combat" class="btn-combat-skip" title="전투 애니메이션 없이 결과를 즉시 계산하여 다음 라운드로 진행합니다">
+        <button id="btn-skip-combat" class="btn-combat-skip" style="display: none !important;" title="전투 애니메이션 없이 결과를 즉시 계산하여 다음 라운드로 진행합니다 [단축키: S]">
           <span class="combat-btn-icon">⏩</span>
           <span class="combat-btn-text">스킵</span>
         </button>
@@ -308,6 +310,81 @@
       </div>
     </div>
   </footer>
+
+  <!-- 게임 설정 모달 -->
+  <div id="settings-modal" class="settings-modal" style="display: none;">
+    <div class="modal-content settings-modal-content">
+      <div class="settings-modal-header">
+        <h2 class="settings-title">⚙️ 게임 설정</h2>
+        <button id="btn-close-settings-x" class="settings-close-x" title="닫기 (Esc 또는 O)">✕</button>
+      </div>
+
+      <div class="settings-body">
+        <!-- 1. 오디오 볼륨 설정 섹션 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">🔊 오디오 볼륨 설정</h3>
+          
+          <!-- 효과음 (SFX) -->
+          <div class="settings-control-row">
+            <div class="settings-control-label">
+              <span class="label-name">효과음 (SFX)</span>
+              <span class="label-desc">타격, 스킬, 상점 새로고침, 구매 사운드</span>
+            </div>
+            <div class="settings-control-action">
+              <button id="btn-sfx-mute-toggle" class="settings-mute-btn" title="효과음 음소거 토글">🔊</button>
+              <input type="range" id="settings-sfx-volume" class="settings-slider" min="0" max="1" step="0.01" value="1.0">
+              <span id="settings-sfx-vol-text" class="settings-vol-text">100%</span>
+            </div>
+          </div>
+
+          <!-- 배경음악 (BGM) -->
+          <div class="settings-control-row">
+            <div class="settings-control-label">
+              <span class="label-name">배경음악 (BGM)</span>
+              <span class="label-desc">영혼의 꽃 성소 테마 앰비언스</span>
+            </div>
+            <div class="settings-control-action">
+              <button id="btn-bgm-modal-mute-toggle" class="settings-mute-btn" title="BGM 음소거 토글 [B]">🔊</button>
+              <input type="range" id="settings-bgm-volume" class="settings-slider" min="0" max="1" step="0.01" value="0.35">
+              <span id="settings-bgm-vol-text" class="settings-vol-text">35%</span>
+            </div>
+          </div>
+
+          <!-- 전체 음소거 (마스터 음소거) -->
+          <div class="settings-control-row">
+            <div class="settings-control-label">
+              <span class="label-name">전체 음소거</span>
+              <span class="label-desc">모든 게임 사운드를 일괄 음소거합니다</span>
+            </div>
+            <div class="settings-control-action">
+              <button id="btn-master-mute-toggle" class="btn-action settings-toggle-btn">전체 음소거 OFF 🔊</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 게임 단축키 가이드 섹션 -->
+        <div class="settings-section">
+          <h3 class="settings-section-title">⌨️ 단축키 안내</h3>
+          <div class="settings-shortcuts-grid">
+            <div class="shortcut-item"><kbd>Space</kbd><span>전투 시작</span></div>
+            <div class="shortcut-item"><kbd>S</kbd><span>전투 스킵</span></div>
+            <div class="shortcut-item"><kbd>D</kbd><span>상점 새로고침 (2G)</span></div>
+            <div class="shortcut-item"><kbd>F</kbd><span>경험치 구매 (4G)</span></div>
+            <div class="shortcut-item"><kbd>1 ~ 5</kbd><span>상점 기물 구매</span></div>
+            <div class="shortcut-item"><kbd>E</kbd><span>챔피언 판매</span></div>
+            <div class="shortcut-item"><kbd>Tab</kbd> / <kbd>Q</kbd><span>8인 로비 순환 정찰</span></div>
+            <div class="shortcut-item"><kbd>[</kbd> / <kbd>]</kbd><span>특성 페이지 전환</span></div>
+            <div class="shortcut-item"><kbd>B</kbd><span>BGM 음소거 토글</span></div>
+            <div class="shortcut-item"><kbd>O</kbd> / <kbd>Esc</kbd><span>설정 열기 / 닫기</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-modal-footer">
+        <button id="btn-close-settings" class="btn-action btn-settings-confirm">확인 및 닫기</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 연출 오버레이 (갈리오 강림 등) -->
   <div id="overlay-container"></div>

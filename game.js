@@ -315,6 +315,17 @@ class TFTGame {
       skipCombatBtn: document.getElementById("btn-skip-combat"),
       resetGameBtn: document.getElementById("btn-reset-game"),
       sellDropzone: document.getElementById("sell-dropzone"),
+      btnOpenSettings: document.getElementById("btn-open-settings"),
+      settingsModal: document.getElementById("settings-modal"),
+      btnCloseSettingsX: document.getElementById("btn-close-settings-x"),
+      btnCloseSettings: document.getElementById("btn-close-settings"),
+      settingsSfxVolume: document.getElementById("settings-sfx-volume"),
+      settingsSfxVolText: document.getElementById("settings-sfx-vol-text"),
+      btnSfxMuteToggle: document.getElementById("btn-sfx-mute-toggle"),
+      settingsBgmVolume: document.getElementById("settings-bgm-volume"),
+      settingsBgmVolText: document.getElementById("settings-bgm-vol-text"),
+      btnBgmModalMuteToggle: document.getElementById("btn-bgm-modal-mute-toggle"),
+      btnMasterMuteToggle: document.getElementById("btn-master-mute-toggle"),
       bgmExpandableBox: document.getElementById("bgm-expandable-box"),
       bgmMuteBtn: document.getElementById("btn-bgm-mute"),
       bgmVolume: document.getElementById("bgm-volume"),
@@ -694,9 +705,10 @@ class TFTGame {
     this.renderItemInventory();
     this.fitBoardToScreen();
 
-    // BGM은 기본 항상 ON (볼륨 0 = 꺼짐)
+    // BGM 및 사운드 설정 초기화
     sound.initBGM();
     this.updateBGMUI(sound.bgmVolume);
+    this.updateSettingsUI();
 
     // 브라우저 정책 대응: 화면 클릭이나 아무 키 입력 시 즉시 자동 시작
     const startBGM = () => {
@@ -717,6 +729,60 @@ class TFTGame {
     if (this.dom.bgmMuteBtn) {
       this.dom.bgmMuteBtn.textContent = vol === 0 ? "🔇" : vol < 0.5 ? "🔉" : "🔊";
       this.dom.bgmMuteBtn.title = vol === 0 ? "음소거 해제 [B]" : "음소거 [B]";
+    }
+  }
+
+  openSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    this.updateSettingsUI();
+    this.dom.settingsModal.style.display = "flex";
+  }
+
+  closeSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    this.dom.settingsModal.style.display = "none";
+  }
+
+  toggleSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    if (this.dom.settingsModal.style.display === "flex") {
+      this.closeSettingsModal();
+    } else {
+      this.openSettingsModal();
+    }
+  }
+
+  updateSettingsUI() {
+    const sfxVol = sound.sfxVolume !== undefined ? sound.sfxVolume : 1.0;
+    const sfxMuted = !!sound.sfxMuted;
+    if (this.dom.settingsSfxVolume) {
+      this.dom.settingsSfxVolume.value = sfxMuted ? 0 : sfxVol;
+    }
+    if (this.dom.settingsSfxVolText) {
+      this.dom.settingsSfxVolText.textContent = `${Math.round((sfxMuted ? 0 : sfxVol) * 100)}%`;
+    }
+    if (this.dom.btnSfxMuteToggle) {
+      this.dom.btnSfxMuteToggle.textContent = (sfxMuted || sfxVol === 0) ? "🔇" : (sfxVol < 0.5 ? "🔉" : "🔊");
+      this.dom.btnSfxMuteToggle.classList.toggle("muted", sfxMuted || sfxVol === 0);
+    }
+
+    const bgmVol = sound.bgmVolume !== undefined ? sound.bgmVolume : 0.35;
+    if (this.dom.settingsBgmVolume) {
+      this.dom.settingsBgmVolume.value = bgmVol;
+    }
+    if (this.dom.settingsBgmVolText) {
+      this.dom.settingsBgmVolText.textContent = `${Math.round(bgmVol * 100)}%`;
+    }
+    if (this.dom.btnBgmModalMuteToggle) {
+      this.dom.btnBgmModalMuteToggle.textContent = bgmVol === 0 ? "🔇" : (bgmVol < 0.5 ? "🔉" : "🔊");
+      this.dom.btnBgmModalMuteToggle.classList.toggle("muted", bgmVol === 0);
+    }
+    this.updateBGMUI(bgmVol);
+
+    if (this.dom.btnMasterMuteToggle) {
+      const isMuted = !!sound.muted;
+      this.dom.btnMasterMuteToggle.textContent = isMuted ? "전체 음소거 ON 🔇" : "전체 음소거 OFF 🔊";
+      this.dom.btnMasterMuteToggle.classList.toggle("active", isMuted);
     }
   }
 
@@ -937,11 +1003,32 @@ class TFTGame {
 
     // 키보드 단축키
     window.addEventListener("keydown", (e) => {
+      // 설정 모달이 열려 있을 때 Esc 또는 O를 누르면 설정 모달 닫기
+      if (this.dom.settingsModal && this.dom.settingsModal.style.display === "flex") {
+        if (e.key === "Escape" || e.key.toUpperCase() === "O") {
+          e.preventDefault();
+          this.closeSettingsModal();
+          return;
+        }
+      }
+
       if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
       if (this.dom.modalContainer.children.length > 0) return; // 모달 열려 있으면 단축키 무시
       const key = e.key.toUpperCase();
       if (key === " " || key === "TAB") e.preventDefault(); // 스크롤 & 포커스 방지
       if (e.repeat && key !== "D") return;
+
+      // O 키: 게임 설정 모달 토글
+      if (key === "O") {
+        this.toggleSettingsModal();
+        return;
+      }
+      if (e.key === "Escape") {
+        if (this.dom.settingsModal && this.dom.settingsModal.style.display === "flex") {
+          this.closeSettingsModal();
+          return;
+        }
+      }
 
       // 특성 페이지 넘김 ([ 이전, ] 다음)
       if (e.key === "[" && this.synergyPage > 0) {
@@ -985,6 +1072,12 @@ class TFTGame {
       } else if (key === "B") {
         const newVol = sound.toggleMute();
         this.updateBGMUI(newVol);
+        this.updateSettingsUI();
+      } else if (key === "S") {
+        if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") {
+          this.scoutPlayer("player");
+        }
+        this.skipCombat();
       } else if (key === " ") {
         if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") {
           this.scoutPlayer("player");
@@ -1064,6 +1157,74 @@ class TFTGame {
         const val = parseFloat(e.target.value);
         sound.setBGMVolume(val);
         this.updateBGMUI(val);
+        this.updateSettingsUI();
+      });
+    }
+
+    // 설정 모달 DOM 이벤트 리스너
+    if (this.dom.btnOpenSettings) {
+      this.dom.btnOpenSettings.addEventListener("click", (e) => {
+        e.currentTarget.blur();
+        this.openSettingsModal();
+      });
+    }
+    if (this.dom.btnCloseSettingsX) {
+      this.dom.btnCloseSettingsX.addEventListener("click", () => this.closeSettingsModal());
+    }
+    if (this.dom.btnCloseSettings) {
+      this.dom.btnCloseSettings.addEventListener("click", () => this.closeSettingsModal());
+    }
+    if (this.dom.settingsModal) {
+      this.dom.settingsModal.addEventListener("click", (e) => {
+        if (e.target === this.dom.settingsModal) {
+          this.closeSettingsModal();
+        }
+      });
+    }
+
+    if (this.dom.settingsSfxVolume) {
+      this.dom.settingsSfxVolume.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        sound.setSFXVolume(val);
+        this.updateSettingsUI();
+      });
+      this.dom.settingsSfxVolume.addEventListener("change", () => {
+        sound.playBuy();
+      });
+    }
+
+    if (this.dom.btnSfxMuteToggle) {
+      this.dom.btnSfxMuteToggle.addEventListener("click", () => {
+        sound.toggleSFXMute();
+        this.updateSettingsUI();
+        if (!sound.sfxMuted && sound.sfxVolume > 0) {
+          sound.playBuy();
+        }
+      });
+    }
+
+    if (this.dom.settingsBgmVolume) {
+      this.dom.settingsBgmVolume.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        sound.setBGMVolume(val);
+        this.updateSettingsUI();
+      });
+    }
+
+    if (this.dom.btnBgmModalMuteToggle) {
+      this.dom.btnBgmModalMuteToggle.addEventListener("click", () => {
+        sound.toggleMute();
+        this.updateSettingsUI();
+      });
+    }
+
+    if (this.dom.btnMasterMuteToggle) {
+      this.dom.btnMasterMuteToggle.addEventListener("click", () => {
+        sound.toggleMasterMute();
+        this.updateSettingsUI();
+        if (!sound.muted) {
+          sound.playBuy();
+        }
       });
     }
     if (this.dom.bgmExpandableBox) {
@@ -2198,12 +2359,14 @@ class TFTGame {
       this.dom.startCombatBtn.innerHTML = `
         <span class="combat-btn-icon">⚔️</span>
         <span class="combat-btn-text">진행 중...</span>
+        <span class="combat-btn-skip-hint">스킵: S</span>
       `;
     } else {
       this.dom.startCombatBtn.innerHTML = `
         <span class="combat-btn-icon">⚔️</span>
         <span class="combat-btn-text">전투 시작</span>
         <span class="combat-btn-key">Space</span>
+        <span class="combat-btn-skip-hint">스킵: S</span>
       `;
     }
   }
@@ -4603,6 +4766,7 @@ class TFTGame {
 
     // 모달창 닫기
     this.dom.modalContainer.innerHTML = "";
+    this.closeSettingsModal();
     this.pendingLootDrops = [];
     document.querySelectorAll(".minion-loot-drop-orb, .loot-drop-shockwave").forEach(el => el.remove());
 
@@ -4662,6 +4826,8 @@ function bootGame() {
     try {
       window.tftGame = new TFTGame();
       window.tftData = { CHAMPIONS, ROUNDS, TRAITS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS, CHAMPION_POOL_SIZES };
+      window.tftSound = sound;
+      window.sound = sound;
     } catch (e) {
       console.error("TFTGame Boot Error:", e);
       window.__bootError = e.stack || e.message;

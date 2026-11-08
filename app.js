@@ -1276,10 +1276,17 @@ class SoundSystem {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.sfxVolume = 1.0;
+    this.sfxMuted = false;
+    this.lastNonZeroSFXVolume = 1.0;
     this.bgmPlaying = false;
     this.bgmTimer = null;
+    this.bgmVolume = 0.35;
+    this.lastNonZeroVolume = 0.35;
     this.masterGain = null;
+    this.sfxGain = null;
     this.noiseBuffer = null;
+    this.initSFX();
   }
 
   init() {
@@ -1288,14 +1295,24 @@ class SoundSystem {
       if (AudioCtx) {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(0.75, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
+
+        this.sfxGain = this.ctx.createGain();
+        const effectiveSFX = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+        this.sfxGain.gain.setValueAtTime(effectiveSFX, this.ctx.currentTime);
+        this.sfxGain.connect(this.masterGain);
+
         this.createNoiseBuffer();
       }
     }
     if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume();
     }
+  }
+
+  getSFXDestination() {
+    return this.sfxGain || this.masterGain;
   }
 
   // 타격감, 카드 셔플, 폭발 연출을 위한 1초 노이즈 버퍼 생성 (메모리 재활용)
@@ -1312,7 +1329,7 @@ class SoundSystem {
 
   // 1. 묵직하고 찰진 평타 물리 타격음 (어택 트랜지언트 크런치 + 묵직한 서브 바디 쿵)
   playAttack() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1335,7 +1352,7 @@ class SoundSystem {
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
-      noiseGain.connect(this.masterGain);
+      noiseGain.connect(this.getSFXDestination());
 
       noise.start(t);
       noise.stop(t + 0.08);
@@ -1352,7 +1369,7 @@ class SoundSystem {
     bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
 
     bodyOsc.connect(bodyGain);
-    bodyGain.connect(this.masterGain);
+    bodyGain.connect(this.getSFXDestination());
 
     bodyOsc.start(t);
     bodyOsc.stop(t + 0.12);
@@ -1360,7 +1377,7 @@ class SoundSystem {
 
   // 2. 상점 리롤 (D키): 덱 카드를 촤라락 섞는 쾌감 있는 셔플 사운드
   playReroll() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1385,7 +1402,7 @@ class SoundSystem {
 
         cardNoise.connect(cFilter);
         cFilter.connect(cGain);
-        cGain.connect(this.masterGain);
+        cGain.connect(this.getSFXDestination());
 
         cardNoise.start(pt);
         cardNoise.stop(pt + 0.05);
@@ -1404,7 +1421,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08 + idx * 0.025 + 0.18);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + 0.08 + idx * 0.025);
       osc.stop(t + 0.08 + idx * 0.025 + 0.2);
@@ -1413,7 +1430,7 @@ class SoundSystem {
 
   // 3. 기물 구매: 짤랑이는 고급 크리스탈 골드 코인 사운드 (진짜 동전 충돌 하모닉스)
   playBuy() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1431,7 +1448,7 @@ class SoundSystem {
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
       click.connect(f);
       f.connect(g);
-      g.connect(this.masterGain);
+      g.connect(this.getSFXDestination());
       click.start(t);
       click.stop(t + 0.035);
     }
@@ -1455,7 +1472,7 @@ class SoundSystem {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + idx * 0.02);
       osc.stop(t + idx * 0.02 + 0.4);
@@ -1464,7 +1481,7 @@ class SoundSystem {
 
   // 4. 판매 사운드: 주머니로 골드가 회수되는 묵직한 금화음
   playSell() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1483,7 +1500,7 @@ class SoundSystem {
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
       swoosh.connect(f);
       f.connect(g);
-      g.connect(this.masterGain);
+      g.connect(this.getSFXDestination());
       swoosh.start(t);
       swoosh.stop(t + 0.19);
     }
@@ -1498,7 +1515,7 @@ class SoundSystem {
       gain.gain.setValueAtTime(0.1, t + idx * 0.03);
       gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.03 + 0.15);
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
       osc.start(t + idx * 0.03);
       osc.stop(t + idx * 0.03 + 0.16);
     });
@@ -1506,7 +1523,7 @@ class SoundSystem {
 
   // 5. 초대형 레벨업 사운드 (808 서브 베이스 쿵 + 브라스 팡파르 + 마법 라이징)
   playLevelUp() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1521,7 +1538,7 @@ class SoundSystem {
     subGain.gain.setValueAtTime(0.5, t);
     subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.65);
     sub.connect(subGain);
-    subGain.connect(this.masterGain);
+    subGain.connect(this.getSFXDestination());
     sub.start(t);
     sub.stop(t + 0.7);
 
@@ -1539,7 +1556,7 @@ class SoundSystem {
       rg.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
       rise.connect(rf);
       rf.connect(rg);
-      rg.connect(this.masterGain);
+      rg.connect(this.getSFXDestination());
       rise.start(t);
       rise.stop(t + 0.48);
     }
@@ -1556,7 +1573,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.04 + 0.6);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.04);
       osc.stop(t + i * 0.04 + 0.65);
@@ -1565,7 +1582,7 @@ class SoundSystem {
 
   // 6. 챔피언 합성 / 진급 (2성 / 3성 / 4성) - 황금빛 영광의 벨 & 파워업
   playCombine(star = 2) {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1582,7 +1599,7 @@ class SoundSystem {
     subGain.gain.setValueAtTime(star >= 3 ? 0.35 : 0.22, t);
     subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
     sub.connect(subGain);
-    subGain.connect(this.masterGain);
+    subGain.connect(this.getSFXDestination());
     sub.start(t);
     sub.stop(t + 0.5);
 
@@ -1597,7 +1614,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.55);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.06);
       osc.stop(t + i * 0.06 + 0.6);
@@ -1606,7 +1623,7 @@ class SoundSystem {
 
   // 7. 스킬 사운드 (검기 슬래시, 거대 강타, 마법 폭발, 탄환 저격 등)
   playSkillSound(type = "default") {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1626,7 +1643,7 @@ class SoundSystem {
         cg.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
         crash.connect(cf);
         cf.connect(cg);
-        cg.connect(this.masterGain);
+        cg.connect(this.getSFXDestination());
         crash.start(t);
         crash.stop(t + 0.85);
       }
@@ -1639,7 +1656,7 @@ class SoundSystem {
       subG.gain.setValueAtTime(0.55, t);
       subG.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
       sub.connect(subG);
-      subG.connect(this.masterGain);
+      subG.connect(this.getSFXDestination());
       sub.start(t);
       sub.stop(t + 0.9);
 
@@ -1658,7 +1675,7 @@ class SoundSystem {
         sg.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
         slash.connect(sf);
         sf.connect(sg);
-        sg.connect(this.masterGain);
+        sg.connect(this.getSFXDestination());
         slash.start(t);
         slash.stop(t + 0.16);
       }
@@ -1671,7 +1688,7 @@ class SoundSystem {
       ringG.gain.setValueAtTime(0.2, t);
       ringG.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
       ring.connect(ringG);
-      ringG.connect(this.masterGain);
+      ringG.connect(this.getSFXDestination());
       ring.start(t);
       ring.stop(t + 0.15);
 
@@ -1694,7 +1711,7 @@ class SoundSystem {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t);
       osc.stop(t + 0.3);
@@ -1703,7 +1720,7 @@ class SoundSystem {
 
   // 8. 짧은 단음 (UI 클릭/배치 피드백)
   playTone(freq = 440, type = "sine", volume = 0.1, duration = 0.08) {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1715,14 +1732,14 @@ class SoundSystem {
     gain.gain.setValueAtTime(volume, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
     osc.connect(gain);
-    gain.connect(this.masterGain);
+    gain.connect(this.getSFXDestination());
     osc.start(t);
     osc.stop(t + duration + 0.02);
   }
 
   // 9. 승리 사운드 (웅장한 승리 팡파르)
   playVictory() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1738,7 +1755,7 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.65);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
 
       osc.start(t + i * 0.09);
       osc.stop(t + i * 0.09 + 0.7);
@@ -1747,7 +1764,7 @@ class SoundSystem {
 
   // 10. 패배 사운드 (묵직한 디미니쉬드)
   playDefeat() {
-    if (this.muted) return;
+    if (this.muted || this.sfxMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -1763,10 +1780,85 @@ class SoundSystem {
       gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.5);
 
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      gain.connect(this.getSFXDestination());
       osc.start(t + i * 0.12);
       osc.stop(t + i * 0.12 + 0.55);
     });
+  }
+
+  // 효과음 (SFX) 볼륨 및 음소거 제어
+  initSFX() {
+    let savedVol = 1.0;
+    let savedMute = false;
+    let savedMasterMute = false;
+    try {
+      const stored = localStorage.getItem("tft_sfx_volume");
+      if (stored !== null) savedVol = parseFloat(stored);
+      const storedMute = localStorage.getItem("tft_sfx_muted");
+      if (storedMute !== null) savedMute = storedMute === "true";
+      const storedMaster = localStorage.getItem("tft_master_muted");
+      if (storedMaster !== null) savedMasterMute = storedMaster === "true";
+    } catch (e) {}
+
+    this.sfxVolume = isNaN(savedVol) ? 1.0 : Math.max(0, Math.min(1, savedVol));
+    this.sfxMuted = !!savedMute;
+    this.muted = !!savedMasterMute;
+    this.lastNonZeroSFXVolume = this.sfxVolume > 0 ? this.sfxVolume : 1.0;
+  }
+
+  setSFXVolume(val) {
+    const num = Math.max(0, Math.min(1, parseFloat(val) || 0));
+    this.sfxVolume = num;
+    if (num > 0) {
+      this.lastNonZeroSFXVolume = num;
+      this.sfxMuted = false;
+    }
+    try {
+      localStorage.setItem("tft_sfx_volume", num);
+      localStorage.setItem("tft_sfx_muted", this.sfxMuted);
+    } catch (e) {}
+
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+  }
+
+  toggleSFXMute() {
+    if (!this.sfxMuted && this.sfxVolume > 0) {
+      this.sfxMuted = true;
+    } else {
+      this.sfxMuted = false;
+      if (this.sfxVolume === 0) {
+        this.sfxVolume = this.lastNonZeroSFXVolume || 1.0;
+      }
+    }
+    try {
+      localStorage.setItem("tft_sfx_volume", this.sfxVolume);
+      localStorage.setItem("tft_sfx_muted", this.sfxMuted);
+    } catch (e) {}
+
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+    return this.sfxMuted;
+  }
+
+  toggleMasterMute() {
+    this.muted = !this.muted;
+    try {
+      localStorage.setItem("tft_master_muted", this.muted);
+    } catch (e) {}
+
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime);
+    }
+    if (this.sfxGain && this.ctx) {
+      const effective = (this.muted || this.sfxMuted) ? 0 : this.sfxVolume;
+      this.sfxGain.gain.setValueAtTime(effective, this.ctx.currentTime);
+    }
+    return this.muted;
   }
 
   // 11. 은은한 롤토체스 운명 테마 BGM (사용자가 극찬한 신비로운 앰비언스 패드)
@@ -2307,6 +2399,17 @@ class TFTGame {
       skipCombatBtn: document.getElementById("btn-skip-combat"),
       resetGameBtn: document.getElementById("btn-reset-game"),
       sellDropzone: document.getElementById("sell-dropzone"),
+      btnOpenSettings: document.getElementById("btn-open-settings"),
+      settingsModal: document.getElementById("settings-modal"),
+      btnCloseSettingsX: document.getElementById("btn-close-settings-x"),
+      btnCloseSettings: document.getElementById("btn-close-settings"),
+      settingsSfxVolume: document.getElementById("settings-sfx-volume"),
+      settingsSfxVolText: document.getElementById("settings-sfx-vol-text"),
+      btnSfxMuteToggle: document.getElementById("btn-sfx-mute-toggle"),
+      settingsBgmVolume: document.getElementById("settings-bgm-volume"),
+      settingsBgmVolText: document.getElementById("settings-bgm-vol-text"),
+      btnBgmModalMuteToggle: document.getElementById("btn-bgm-modal-mute-toggle"),
+      btnMasterMuteToggle: document.getElementById("btn-master-mute-toggle"),
       bgmExpandableBox: document.getElementById("bgm-expandable-box"),
       bgmMuteBtn: document.getElementById("btn-bgm-mute"),
       bgmVolume: document.getElementById("bgm-volume"),
@@ -2686,9 +2789,10 @@ class TFTGame {
     this.renderItemInventory();
     this.fitBoardToScreen();
 
-    // BGM은 기본 항상 ON (볼륨 0 = 꺼짐)
+    // BGM 및 사운드 설정 초기화
     sound.initBGM();
     this.updateBGMUI(sound.bgmVolume);
+    this.updateSettingsUI();
 
     // 브라우저 정책 대응: 화면 클릭이나 아무 키 입력 시 즉시 자동 시작
     const startBGM = () => {
@@ -2709,6 +2813,60 @@ class TFTGame {
     if (this.dom.bgmMuteBtn) {
       this.dom.bgmMuteBtn.textContent = vol === 0 ? "🔇" : vol < 0.5 ? "🔉" : "🔊";
       this.dom.bgmMuteBtn.title = vol === 0 ? "음소거 해제 [B]" : "음소거 [B]";
+    }
+  }
+
+  openSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    this.updateSettingsUI();
+    this.dom.settingsModal.style.display = "flex";
+  }
+
+  closeSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    this.dom.settingsModal.style.display = "none";
+  }
+
+  toggleSettingsModal() {
+    if (!this.dom.settingsModal) return;
+    if (this.dom.settingsModal.style.display === "flex") {
+      this.closeSettingsModal();
+    } else {
+      this.openSettingsModal();
+    }
+  }
+
+  updateSettingsUI() {
+    const sfxVol = sound.sfxVolume !== undefined ? sound.sfxVolume : 1.0;
+    const sfxMuted = !!sound.sfxMuted;
+    if (this.dom.settingsSfxVolume) {
+      this.dom.settingsSfxVolume.value = sfxMuted ? 0 : sfxVol;
+    }
+    if (this.dom.settingsSfxVolText) {
+      this.dom.settingsSfxVolText.textContent = `${Math.round((sfxMuted ? 0 : sfxVol) * 100)}%`;
+    }
+    if (this.dom.btnSfxMuteToggle) {
+      this.dom.btnSfxMuteToggle.textContent = (sfxMuted || sfxVol === 0) ? "🔇" : (sfxVol < 0.5 ? "🔉" : "🔊");
+      this.dom.btnSfxMuteToggle.classList.toggle("muted", sfxMuted || sfxVol === 0);
+    }
+
+    const bgmVol = sound.bgmVolume !== undefined ? sound.bgmVolume : 0.35;
+    if (this.dom.settingsBgmVolume) {
+      this.dom.settingsBgmVolume.value = bgmVol;
+    }
+    if (this.dom.settingsBgmVolText) {
+      this.dom.settingsBgmVolText.textContent = `${Math.round(bgmVol * 100)}%`;
+    }
+    if (this.dom.btnBgmModalMuteToggle) {
+      this.dom.btnBgmModalMuteToggle.textContent = bgmVol === 0 ? "🔇" : (bgmVol < 0.5 ? "🔉" : "🔊");
+      this.dom.btnBgmModalMuteToggle.classList.toggle("muted", bgmVol === 0);
+    }
+    this.updateBGMUI(bgmVol);
+
+    if (this.dom.btnMasterMuteToggle) {
+      const isMuted = !!sound.muted;
+      this.dom.btnMasterMuteToggle.textContent = isMuted ? "전체 음소거 ON 🔇" : "전체 음소거 OFF 🔊";
+      this.dom.btnMasterMuteToggle.classList.toggle("active", isMuted);
     }
   }
 
@@ -2929,11 +3087,32 @@ class TFTGame {
 
     // 키보드 단축키
     window.addEventListener("keydown", (e) => {
+      // 설정 모달이 열려 있을 때 Esc 또는 O를 누르면 설정 모달 닫기
+      if (this.dom.settingsModal && this.dom.settingsModal.style.display === "flex") {
+        if (e.key === "Escape" || e.key.toUpperCase() === "O") {
+          e.preventDefault();
+          this.closeSettingsModal();
+          return;
+        }
+      }
+
       if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
       if (this.dom.modalContainer.children.length > 0) return; // 모달 열려 있으면 단축키 무시
       const key = e.key.toUpperCase();
       if (key === " " || key === "TAB") e.preventDefault(); // 스크롤 & 포커스 방지
       if (e.repeat && key !== "D") return;
+
+      // O 키: 게임 설정 모달 토글
+      if (key === "O") {
+        this.toggleSettingsModal();
+        return;
+      }
+      if (e.key === "Escape") {
+        if (this.dom.settingsModal && this.dom.settingsModal.style.display === "flex") {
+          this.closeSettingsModal();
+          return;
+        }
+      }
 
       // 특성 페이지 넘김 ([ 이전, ] 다음)
       if (e.key === "[" && this.synergyPage > 0) {
@@ -2977,6 +3156,12 @@ class TFTGame {
       } else if (key === "B") {
         const newVol = sound.toggleMute();
         this.updateBGMUI(newVol);
+        this.updateSettingsUI();
+      } else if (key === "S") {
+        if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") {
+          this.scoutPlayer("player");
+        }
+        this.skipCombat();
       } else if (key === " ") {
         if (this.scoutedPlayerId && this.scoutedPlayerId !== "player") {
           this.scoutPlayer("player");
@@ -3056,6 +3241,74 @@ class TFTGame {
         const val = parseFloat(e.target.value);
         sound.setBGMVolume(val);
         this.updateBGMUI(val);
+        this.updateSettingsUI();
+      });
+    }
+
+    // 설정 모달 DOM 이벤트 리스너
+    if (this.dom.btnOpenSettings) {
+      this.dom.btnOpenSettings.addEventListener("click", (e) => {
+        e.currentTarget.blur();
+        this.openSettingsModal();
+      });
+    }
+    if (this.dom.btnCloseSettingsX) {
+      this.dom.btnCloseSettingsX.addEventListener("click", () => this.closeSettingsModal());
+    }
+    if (this.dom.btnCloseSettings) {
+      this.dom.btnCloseSettings.addEventListener("click", () => this.closeSettingsModal());
+    }
+    if (this.dom.settingsModal) {
+      this.dom.settingsModal.addEventListener("click", (e) => {
+        if (e.target === this.dom.settingsModal) {
+          this.closeSettingsModal();
+        }
+      });
+    }
+
+    if (this.dom.settingsSfxVolume) {
+      this.dom.settingsSfxVolume.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        sound.setSFXVolume(val);
+        this.updateSettingsUI();
+      });
+      this.dom.settingsSfxVolume.addEventListener("change", () => {
+        sound.playBuy();
+      });
+    }
+
+    if (this.dom.btnSfxMuteToggle) {
+      this.dom.btnSfxMuteToggle.addEventListener("click", () => {
+        sound.toggleSFXMute();
+        this.updateSettingsUI();
+        if (!sound.sfxMuted && sound.sfxVolume > 0) {
+          sound.playBuy();
+        }
+      });
+    }
+
+    if (this.dom.settingsBgmVolume) {
+      this.dom.settingsBgmVolume.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        sound.setBGMVolume(val);
+        this.updateSettingsUI();
+      });
+    }
+
+    if (this.dom.btnBgmModalMuteToggle) {
+      this.dom.btnBgmModalMuteToggle.addEventListener("click", () => {
+        sound.toggleMute();
+        this.updateSettingsUI();
+      });
+    }
+
+    if (this.dom.btnMasterMuteToggle) {
+      this.dom.btnMasterMuteToggle.addEventListener("click", () => {
+        sound.toggleMasterMute();
+        this.updateSettingsUI();
+        if (!sound.muted) {
+          sound.playBuy();
+        }
       });
     }
     if (this.dom.bgmExpandableBox) {
@@ -4190,12 +4443,14 @@ class TFTGame {
       this.dom.startCombatBtn.innerHTML = `
         <span class="combat-btn-icon">⚔️</span>
         <span class="combat-btn-text">진행 중...</span>
+        <span class="combat-btn-skip-hint">스킵: S</span>
       `;
     } else {
       this.dom.startCombatBtn.innerHTML = `
         <span class="combat-btn-icon">⚔️</span>
         <span class="combat-btn-text">전투 시작</span>
         <span class="combat-btn-key">Space</span>
+        <span class="combat-btn-skip-hint">스킵: S</span>
       `;
     }
   }
@@ -6595,6 +6850,7 @@ class TFTGame {
 
     // 모달창 닫기
     this.dom.modalContainer.innerHTML = "";
+    this.closeSettingsModal();
     this.pendingLootDrops = [];
     document.querySelectorAll(".minion-loot-drop-orb, .loot-drop-shockwave").forEach(el => el.remove());
 
@@ -6654,6 +6910,8 @@ function bootGame() {
     try {
       window.tftGame = new TFTGame();
       window.tftData = { CHAMPIONS, ROUNDS, TRAITS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS, CHAMPION_POOL_SIZES };
+      window.tftSound = sound;
+      window.sound = sound;
     } catch (e) {
       console.error("TFTGame Boot Error:", e);
       window.__bootError = e.stack || e.message;
