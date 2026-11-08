@@ -237,11 +237,11 @@
       <div class="level-deploy-row">
         <div class="level-chip">
           <span class="chip-label">LEVEL</span>
-          <span id="level-number" class="chip-value">2</span>
+          <span id="level-number" class="chip-value">1</span>
         </div>
         <div id="deploy-chip" class="deploy-chip" title="현재 배치된 챔피언 / 최대 배치 인원">
           <span class="chip-label">배치</span>
-          <span id="deploy-count" class="chip-value">0 / 2</span>
+          <span id="deploy-count" class="chip-value">0 / 1</span>
         </div>
       </div>
 
@@ -295,7 +295,7 @@
         <!-- 챔피언 등장 확률: 우측으로 미룸 -->
         <div class="shop-rates-bar-container">
           <div class="shop-rates-title">
-            <span>🎲 등장 확률 <span class="rate-lvl-badge"><span id="rate-level-label">Lv. 2</span></span></span>
+            <span>🎲 등장 확률 <span class="rate-lvl-badge"><span id="rate-level-label">Lv. 1</span></span></span>
           </div>
           <div id="shop-rates-display" class="shop-rates-bar">
             <!-- 코스트별 등장 확률 동적 갱신 -->
@@ -417,7 +417,7 @@
 
         // TEST 3: Force of nature (뒤집개+뒤집개) and getMaxTeamSize
         game.resetGame();
-        assert(game.getMaxTeamSize() === 2, 'Default max team size is level 2');
+        assert(game.getMaxTeamSize() === 1, 'Default max team size is level 1');
         const fonUnit = {
           uid: 'fon_u',
           champ: tftData.CHAMPIONS[0],
@@ -431,7 +431,7 @@
         };
         game.board[3][0] = fonUnit;
         assert(game.getForceOfNatureCount() === 1, '1 Force of Nature detected');
-        assert(game.getMaxTeamSize() === 3, 'Max team size increased by 1 (level 2 + 1 = 3)');
+        assert(game.getMaxTeamSize() === 2, 'Max team size increased by 1 (level 1 + 1 = 2)');
         game.board[3][0] = null;
 
         // TEST 4: Thieves Gloves mechanics (thiefs_gloves)
@@ -648,6 +648,15 @@
         assert(game.roundIdx >= 1, 'Pressing S immediately skips combat to next round: round ' + game.roundIdx);
 
         game.resetGame();
+
+        // TEST 15: Stage 1-1 Initial Progression & Bot Level Fairness
+        assert(game.player.level === 1, 'Player starts at Level 1 in 1-1');
+        assert(game.getMaxTeamSize() === 1, 'Max team size at 1-1 is 1 unit');
+        const botsAt11 = game.lobbyOpponents.filter(o => !o.isPlayer);
+        assert(botsAt11.every(o => o.level === 1), 'All 7 AI bots start at Level 1 in 1-1');
+        assert(botsAt11.every(o => o.board.length === 1), 'All 7 AI bots have exactly 1 unit in 1-1');
+        assert(botsAt11.every(o => o.board[0].star === 1), 'All AI bot units in 1-1 are 1-star (no 2-stars)');
+        assert(botsAt11.every(o => (!o.bench || o.bench.length === 0)), 'All AI bot benches in 1-1 are empty');
 
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';
         document.title = 'ALL_TESTS_PASSED';

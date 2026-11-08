@@ -37,7 +37,7 @@ export const CHOSEN_DROP_RATES = {
 
 export const LEVEL_EXP = {
   1: 2,
-  2: 2,
+  2: 4,
   3: 6,
   4: 10,
   5: 20,

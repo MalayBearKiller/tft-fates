@@ -41,7 +41,7 @@ const CHOSEN_DROP_RATES = {
 
 const LEVEL_EXP = {
   1: 2,
-  2: 2,
+  2: 4,
   3: 6,
   4: 10,
   5: 20,
@@ -2218,7 +2218,7 @@ const OPPONENT_COMP_POOLS = {
     name: "세트",
     levels: {
       1: { board: [{ champId: "garen", star: 1, row: 5, col: 3 }], bench: [] },
-      2: { board: [{ champId: "garen", star: 1, row: 5, col: 3 }, { champId: "sylas", star: 1, row: 5, col: 4 }], bench: [{ champId: "pyke", star: 1, index: 0 }] },
+      2: { board: [{ champId: "garen", star: 1, row: 5, col: 3 }, { champId: "sylas", star: 1, row: 5, col: 4 }], bench: [] },
       3: { board: [{ champId: "garen", star: 2, row: 5, col: 3 }, { champId: "sylas", star: 1, row: 5, col: 4 }, { champId: "pyke", star: 1, row: 4, col: 2 }], bench: [] },
       4: { board: [{ champId: "garen", star: 2, row: 5, col: 3 }, { champId: "sylas", star: 2, row: 5, col: 4 }, { champId: "pyke", star: 1, row: 4, col: 2 }, { champId: "katarina", star: 1, row: 4, col: 4 }], bench: [] },
       5: { board: [{ champId: "garen", star: 2, row: 5, col: 3 }, { champId: "katarina", star: 2, row: 4, col: 4 }, { champId: "sejuani", star: 1, row: 5, col: 2 }, { champId: "pyke", star: 2, row: 4, col: 2 }, { champId: "sylas", star: 2, row: 5, col: 4 }], bench: [{ champId: "warwick", star: 1, index: 0 }] },
@@ -2320,9 +2320,9 @@ class TFTGame {
     this.player = {
       hp: 100,
       gold: 10,
-      level: 2,
+      level: 1,
       exp: 0,
-      maxExp: LEVEL_EXP[2],
+      maxExp: LEVEL_EXP[1],
       chosenChamp: null, // 현재 소유한 선택받은 자 기물 (1개만 소유 가능)
       winStreak: 0,
       lossStreak: 0,
@@ -6858,9 +6858,9 @@ class TFTGame {
     this.player = {
       hp: 100,
       gold: 10,
-      level: 2,
+      level: 1,
       exp: 0,
-      maxExp: LEVEL_EXP[2],
+      maxExp: LEVEL_EXP[1],
       chosenChamp: null,
       winStreak: 0,
       lossStreak: 0,
