@@ -105,15 +105,8 @@
       </div>
     </div>
 
-    <!-- 우측 상단 플로팅 컨트롤: 확장형 BGM + 설정 + 초기화 (깔끔한 컴팩트 캡슐) -->
+    <!-- 우측 상단 플로팅 컨트롤: 설정 + 초기화 (깔끔한 컴팩트 캡슐) -->
     <div class="hud-section hud-right">
-      <div id="bgm-expandable-box" class="bgm-expandable-box" title="BGM 볼륨 설정 (클릭/호버 시 확장, 단축키: B)">
-        <button id="btn-bgm-mute" class="bgm-mute-btn" title="음소거 토글 [B]">🔊</button>
-        <div class="bgm-slider-drawer">
-          <input type="range" id="bgm-volume" class="bgm-volume-slider" min="0" max="1" step="0.01" value="0.35">
-          <span id="bgm-vol-text" class="bgm-vol-text">35%</span>
-        </div>
-      </div>
       <button id="btn-open-settings" class="btn-action btn-settings" title="게임 설정 열기 (단축키: O 또는 Esc)">⚙️ 설정</button>
       <button id="btn-reset-game" class="btn-action btn-reset" title="게임을 처음 상태(1-1)로 완전히 초기화">🔄 초기화</button>
     </div>
@@ -654,6 +647,16 @@
         assert(game.dom.settingsModal.style.display === 'flex', 'Settings modal toggled to open');
         game.toggleSettingsModal();
         assert(game.dom.settingsModal.style.display === 'none', 'Settings modal toggled to close');
+
+        // Test BGM expandable box removed from HUD & settings/reset buttons equal size
+        assert(!document.getElementById('bgm-expandable-box'), 'Standalone BGM expandable box removed from HUD');
+        const settingsBtn = document.getElementById('btn-open-settings');
+        const resetBtn = document.getElementById('btn-reset-game');
+        assert(!!settingsBtn && !!resetBtn, 'Settings and Reset buttons exist');
+        const setRect = settingsBtn.getBoundingClientRect();
+        const rstRect = resetBtn.getBoundingClientRect();
+        assert(Math.abs(setRect.height - rstRect.height) <= 1, 'Settings and Reset buttons have identical height (' + setRect.height + 'px vs ' + rstRect.height + 'px)');
+        assert(Math.abs(setRect.width - rstRect.width) <= 2, 'Settings and Reset buttons have identical width (' + setRect.width + 'px vs ' + rstRect.width + 'px)');
 
         // Test start combat button dock & embedded skip button
         const startBtn = document.getElementById('btn-start-combat');
