@@ -2411,6 +2411,10 @@ class TFTGame {
   // 10칸 아이템 인벤토리 렌더링 & 드래그 이벤트 설정
   renderItemInventory() {
     if (!this.dom.itemInventorySlots) return;
+    if (this.player && this.player.itemInventory) {
+      // 유효하지 않은 항목(null, undefined, 미정의 id) 자동 정제
+      this.player.itemInventory = this.player.itemInventory.filter(id => id && ITEMS[id]);
+    }
     if (this.dom.inventoryCount) {
       this.dom.inventoryCount.textContent = (this.player.itemInventory ? this.player.itemInventory.length : 0);
     }
@@ -3365,17 +3369,17 @@ class TFTGame {
       // 수집된 아이템 재장착 (최대 3개, 기본 아이템끼리는 자동 조합, 3개 초과분은 인벤토리로 회수)
       main.unit.items = [];
       for (const itId of collectedItems) {
+        if (!itId || !ITEMS[itId]) continue;
         if (main.unit.items.length < 3) {
           // 기본 아이템인지 확인하고 기존 기본템과 조합 시도
-          const isBase = BASE_ITEMS.some(b => b.id === itId);
+          const isBase = !!ITEMS[itId]?.isComponent;
           let combined = false;
           if (isBase) {
-            const baseIdx = main.unit.items.findIndex(existingId => BASE_ITEMS.some(b => b.id === existingId));
+            const baseIdx = main.unit.items.findIndex(existingId => ITEMS[existingId]?.isComponent);
             if (baseIdx !== -1) {
               const prevBase = main.unit.items[baseIdx];
-              const recipeKey1 = `${prevBase}+${itId}`;
-              const recipeKey2 = `${itId}+${prevBase}`;
-              const completedId = ITEM_RECIPES[recipeKey1] || ITEM_RECIPES[recipeKey2];
+              const recipeKey = [prevBase, itId].sort().join("+");
+              const completedId = ITEM_RECIPES[recipeKey];
               if (completedId) {
                 main.unit.items[baseIdx] = completedId;
                 combined = true;
@@ -6016,9 +6020,10 @@ class TFTGame {
         for (let i = 0; i < dropCount; i++) {
           if (!this.player.itemInventory) this.player.itemInventory = [];
           if (this.player.itemInventory.length < 10) {
-            const randomBase = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
-            this.player.itemInventory.push(randomBase.id);
-            droppedNames.push(`${randomBase.icon} ${randomBase.name}`);
+            const randomBaseId = BASE_ITEMS[Math.floor(Math.random() * BASE_ITEMS.length)];
+            const baseItemObj = ITEMS[randomBaseId];
+            this.player.itemInventory.push(randomBaseId);
+            droppedNames.push(`${baseItemObj?.icon || '📦'} ${baseItemObj?.name || randomBaseId}`);
           }
         }
         if (droppedNames.length > 0) {
@@ -6150,13 +6155,16 @@ class TFTGame {
         <h2>🎁 무기고: 기본 아이템 선택</h2>
         <p style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">원하는 기본 아이템 1개를 선택하여 보관함에 획득하세요.</p>
         <div style="display: flex; gap: 14px; justify-content: center; margin-bottom: 24px;">
-          ${choices.map((it, idx) => `
+          ${choices.map((itemId, idx) => {
+            const it = ITEMS[itemId];
+            return `
             <div class="item-choice-card" data-idx="${idx}" style="flex: 1; background: rgba(30, 41, 59, 0.9); border: 2px solid #eab308; border-radius: 12px; padding: 16px 12px; text-align: center; cursor: pointer; transition: transform 0.2s, background 0.2s;">
-              <div style="font-size: 38px; margin-bottom: 8px;">${it.icon}</div>
-              <div style="font-weight: 800; font-size: 14px; color: #f8fafc; margin-bottom: 6px;">${it.name}</div>
-              <div style="font-size: 11px; color: #cbd5e1; line-height: 1.4;">${it.desc}</div>
+              <div style="font-size: 38px; margin-bottom: 8px;">${it ? it.icon : '🗡️'}</div>
+              <div style="font-weight: 800; font-size: 14px; color: #f8fafc; margin-bottom: 6px;">${it ? it.name : itemId}</div>
+              <div style="font-size: 11px; color: #cbd5e1; line-height: 1.4;">${it ? it.desc : ''}</div>
             </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
         <div style="font-size: 11px; color: #64748b;">(클릭 시 즉시 보관함으로 지급됩니다)</div>
       </div>
@@ -6175,13 +6183,14 @@ class TFTGame {
       });
       card.addEventListener("click", () => {
         const cIdx = parseInt(card.dataset.idx, 10);
-        const selected = choices[cIdx];
+        const selectedId = choices[cIdx];
+        const selected = ITEMS[selectedId];
         if (!this.player.itemInventory) this.player.itemInventory = [];
         if (this.player.itemInventory.length < 10) {
-          this.player.itemInventory.push(selected.id);
+          this.player.itemInventory.push(selectedId);
           this.renderItemInventory();
           sound.playBuy();
-          this.showToastNotification(`🎁 ${selected.name} 획득 완료!`, "success");
+          this.showToastNotification(`🎁 [${selected ? selected.name : selectedId}] 획득 완료!`, "success");
         } else {
           this.showToastNotification("아이템 보관함이 가득 차서 받을 수 없습니다!", "error");
         }

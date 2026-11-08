@@ -507,6 +507,30 @@
         assert(roundsSurvived > 0, 'Survived ' + roundsSurvived + ' rounds in simulation');
         assert(game.phase === 'planning' || game.phase === 'gameover' || game.phase === 'victory', 'Final phase valid: ' + game.phase);
 
+        // TEST 11: Armory Choice Modal & Item Drops (No undefined anywhere!)
+        game.resetGame();
+        game.phase = 'planning';
+        game.player.itemInventory = [];
+        game.showItemChoiceModal();
+        const armoryModal = document.querySelector('.item-choice-modal');
+        assert(!!armoryModal, 'Armory modal opened');
+        assert(!armoryModal.innerHTML.includes('undefined'), 'No undefined text in armory modal content');
+        const cards = armoryModal.querySelectorAll('.item-choice-card');
+        assert(cards.length === 3, '3 armory cards rendered');
+        // Click first card
+        cards[0].click();
+        assert(game.player.itemInventory.length === 1, '1 item selected and added to inventory');
+        const acquiredId = game.player.itemInventory[0];
+        assert(typeof acquiredId === 'string' && !!tftData.ITEMS[acquiredId], 'Acquired item is valid string ID: ' + acquiredId);
+        assert(!document.querySelector('.item-choice-modal'), 'Armory modal closed after selection');
+
+        // Test itemInventory auto-cleansing
+        game.player.itemInventory.push(undefined);
+        game.player.itemInventory.push(null);
+        game.player.itemInventory.push('invalid_nonexistent_item');
+        game.renderItemInventory();
+        assert(game.player.itemInventory.length === 1 && game.player.itemInventory[0] === acquiredId, 'renderItemInventory cleanses invalid/undefined items');
+
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';
         document.title = 'ALL_TESTS_PASSED';
         fetch('/test_result?status=ALL_TESTS_PASSED&assertions=' + results.length);
