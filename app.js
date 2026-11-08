@@ -4,6 +4,15 @@
 // ---- data.js ----
 // TFT 시즌 4: 운명 (Fates) 데이터 정의 - 패치 11.8 최종 버전 기준
 
+// TFT 시즌 4 운명 공식 코스트별 기물 풀 매수 (챔피언 1종당 전체 매수)
+const CHAMPION_POOL_SIZES = {
+  1: 29, // 1코스트: 29장
+  2: 22, // 2코스트: 22장
+  3: 18, // 3코스트: 18장
+  4: 12, // 4코스트: 12장
+  5: 10  // 5코스트: 10장
+};
+
 const DROP_RATES = {
   1: [1.00, 0.00, 0.00, 0.00, 0.00],
   2: [1.00, 0.00, 0.00, 0.00, 0.00],
@@ -3105,6 +3114,89 @@ class TFTGame {
     }
   }
 
+  // 8인 공유 기물 풀 중 특정 챔피언의 현재 총 사용량 (내 필드/벤치/상점 + 생존 AI 상대들의 필드/벤치)
+  getChampionCopiesInUse(champId, excludeShopIndex = -1) {
+    let inUse = 0;
+
+    // 1. 내 전장 필드 기물
+    if (this.board) {
+      for (let r = 3; r < 6; r++) {
+        for (let c = 0; c < 7; c++) {
+          const u = this.board[r][c];
+          if (u && u.champ && u.champ.id === champId) {
+            inUse += (u.star === 3 ? 9 : (u.star === 2 ? 3 : 1));
+          }
+        }
+      }
+    }
+
+    // 2. 내 대기석(벤치) 기물
+    if (this.bench) {
+      this.bench.forEach(u => {
+        if (u && u.champ && u.champ.id === champId) {
+          inUse += (u.star === 3 ? 9 : (u.star === 2 ? 3 : 1));
+        }
+      });
+    }
+
+    // 3. 구매 중인 임시 유닛 (합성 대기)
+    if (this.pendingBuyUnit && this.pendingBuyUnit.champ && this.pendingBuyUnit.champ.id === champId) {
+      inUse += (this.pendingBuyUnit.isChosen ? 3 : 1);
+    }
+
+    // 4. 내 상점 카드 (아직 구매하지 않고 진열 중인 기물도 풀에서 점유)
+    if (this.shopSlots) {
+      this.shopSlots.forEach((slot, idx) => {
+        if (idx !== excludeShopIndex && slot && slot.baseChamp && slot.baseChamp.id === champId) {
+          inUse += (slot.isChosen ? 3 : 1);
+        }
+      });
+    }
+
+    // 5. 생존한 AI 로비 상대들의 필드 및 벤치 기물 (탈락한 유저는 기물이 풀로 반환되므로 제외)
+    if (this.lobbyOpponents) {
+      this.lobbyOpponents.forEach(opp => {
+        if (opp.isPlayer || !opp.isAlive) return;
+
+        if (opp.board && Array.isArray(opp.board)) {
+          opp.board.forEach(item => {
+            if (item && item.champId === champId) {
+              const star = item.star || 1;
+              inUse += (star === 3 ? 9 : (star === 2 ? 3 : 1));
+            }
+          });
+        }
+
+        if (opp.bench && Array.isArray(opp.bench)) {
+          opp.bench.forEach(item => {
+            if (item && item.champId === champId) {
+              const star = item.star || 1;
+              inUse += (star === 3 ? 9 : (star === 2 ? 3 : 1));
+            }
+          });
+        }
+      });
+    }
+
+    return inUse;
+  }
+
+  // 전체 공유 기물 풀 중 현재 남아있는 잔여 수량
+  getRemainingChampionPool(champId, excludeShopIndex = -1) {
+    const champ = CHAMPIONS.find(c => c.id === champId);
+    if (!champ) return 0;
+    const maxCopies = CHAMPION_POOL_SIZES[champ.cost] || 20;
+    const inUse = this.getChampionCopiesInUse(champId, excludeShopIndex);
+    return Math.max(0, maxCopies - inUse);
+  }
+
+  // 챔피언 코스트별 최대 총 수량 (1코 29, 2코 22, 3코 18, 4코 12, 5코 10)
+  getMaxChampionPool(champId) {
+    const champ = CHAMPIONS.find(c => c.id === champId);
+    if (!champ) return 20;
+    return CHAMPION_POOL_SIZES[champ.cost] || 20;
+  }
+
   // 상점 리롤
   rerollShop(free = false) {
     if (this.phase !== "planning") return;
@@ -3117,13 +3209,15 @@ class TFTGame {
     this.updateHUD();
   }
 
-  // 상점 새로고침 로직 (시즌 4 패치 11.8 공식 확률표 & 선택받은 자 코스트 룰 적용)
+  // 상점 새로고침 로직 (TFT 시즌 4 공유 기물 풀 기반 가중치 롤링 & 선택받은 자 코스트 룰 적용)
   refreshShop(force = false) {
     if (this.shopLocked && !force) return;
 
     const rates = DROP_RATES[this.player.level] || DROP_RATES[1];
     const chosenRates = CHOSEN_DROP_RATES[this.player.level] || CHOSEN_DROP_RATES[1];
-    this.shopSlots = [];
+
+    // 기존 상점 슬롯을 비워 미구매 기물을 공용 풀로 먼저 반환한 후 새 롤 추첨
+    this.shopSlots = [null, null, null, null, null];
 
     // 플레이어가 선택받은 자를 보유하지 않은 경우, 상점 롤 시 약 33% 확률로 1장의 '선택받은 자' 슬롯 결정
     const canSpawnChosen = (this.player.chosenChamp === null);
@@ -3133,7 +3227,7 @@ class TFTGame {
       const isChosen = (slot === chosenSlotIndex);
       const activeRates = isChosen ? chosenRates : rates;
 
-      // 코스트 결정
+      // 1. 코스트 결정 (레벨별 공식 확률표 기준)
       const rand = Math.random();
       let cost = 1;
       let cum = 0;
@@ -3145,30 +3239,62 @@ class TFTGame {
         }
       }
 
-      // 해당 코스트 챔피언 중 랜덤 선택
-      const pool = CHAMPIONS.filter(ch => ch.cost === cost);
-      if (pool.length === 0) {
-        // 폴백
-        const anyPool = CHAMPIONS.filter(ch => ch.cost === 1);
-        const fallback = anyPool[Math.floor(Math.random() * anyPool.length)];
-        this.shopSlots.push({ baseChamp: fallback, isChosen: false, chosenTrait: null, cost: fallback.cost, star: 1 });
-        continue;
+      // 2. 해당 코스트 챔피언 중 공유 풀에 잔여 수량이 있는 챔피언 필터링
+      // (선택받은 자는 2성 완제품이므로 풀에 최소 3장 이상 남아 있어야만 등장 가능)
+      const minRequired = isChosen ? 3 : 1;
+      let candidates = CHAMPIONS.filter(ch => ch.cost === cost && this.getRemainingChampionPool(ch.id) >= minRequired);
+
+      // 만약 해당 코스트에 기물이 완전히 소진되었으면(0장), 풀이 남아있는 다른 코스트로 폴백
+      if (candidates.length === 0) {
+        for (let altCost = 1; altCost <= 5; altCost++) {
+          const altCandidates = CHAMPIONS.filter(ch => ch.cost === altCost && this.getRemainingChampionPool(ch.id) >= minRequired);
+          if (altCandidates.length > 0) {
+            candidates = altCandidates;
+            cost = altCost;
+            break;
+          }
+        }
       }
-      const baseChamp = pool[Math.floor(Math.random() * pool.length)];
+
+      // 전체 풀이 극단적으로 고갈된 경우 안전 폴백
+      if (candidates.length === 0) {
+        candidates = CHAMPIONS.filter(ch => ch.cost === cost);
+        if (candidates.length === 0) candidates = [CHAMPIONS[0]];
+      }
+
+      // 3. 잔여 기물 수량 비례 가중치 랜덤 추첨 (Weighted Random Draw)
+      // 풀에 많이 남아있는 기물일수록 확률이 높고, 남들이 사가서 적게 남은 기물은 확률이 대폭 감소!
+      let totalWeight = 0;
+      const weights = candidates.map(ch => {
+        const rem = this.getRemainingChampionPool(ch.id);
+        const w = Math.max(1, rem);
+        totalWeight += w;
+        return w;
+      });
+
+      let rVal = Math.random() * totalWeight;
+      let selectedChamp = candidates[0];
+      for (let i = 0; i < candidates.length; i++) {
+        rVal -= weights[i];
+        if (rVal <= 0) {
+          selectedChamp = candidates[i];
+          break;
+        }
+      }
 
       let chosenTrait = null;
       if (isChosen) {
-        // 챔피언의 특성 중 하나를 선택받은 자 특성(x2)으로 지정
-        chosenTrait = baseChamp.traits[Math.floor(Math.random() * baseChamp.traits.length)];
+        chosenTrait = selectedChamp.traits[Math.floor(Math.random() * selectedChamp.traits.length)];
       }
 
-      this.shopSlots.push({
-        baseChamp,
+      // 4. 슬롯에 배치 (배치 즉시 다음 슬롯 추첨 시 잔여 기물 풀 계산에 실시간 반영)
+      this.shopSlots[slot] = {
+        baseChamp: selectedChamp,
         isChosen,
         chosenTrait,
-        cost: isChosen ? baseChamp.cost * 3 : baseChamp.cost,
+        cost: isChosen ? selectedChamp.cost * 3 : selectedChamp.cost,
         star: isChosen ? 2 : 1
-      });
+      };
     }
 
     this.renderShop();
@@ -3204,6 +3330,9 @@ class TFTGame {
         return `<span class="trait-pill">${t ? t.icon + ' ' + t.name : tKey}</span>`;
       }).join("");
 
+      const remCopies = this.getRemainingChampionPool(baseChamp.id);
+      const maxCopies = this.getMaxChampionPool(baseChamp.id);
+
       card.innerHTML = `
         <img class="shop-card-splash" src="${splashUrl}" alt="${baseChamp.name}" onerror="this.src='${baseChamp.image}'">
         <div class="shop-card-overlay"></div>
@@ -3213,6 +3342,7 @@ class TFTGame {
             <div class="card-name-group">
               <span class="card-hotkey">${index + 1}</span>
               <span class="card-name">${baseChamp.name} ${star > 1 ? '<span class="card-star-tag">★★</span>' : ''}</span>
+              <span class="card-pool-tag" title="전체 8인 공유 기물 풀 중 잔여: ${remCopies}/${maxCopies}장">${remCopies}/${maxCopies}</span>
             </div>
             <span class="card-cost">${cost} 🪙</span>
           </div>
@@ -3221,7 +3351,7 @@ class TFTGame {
           </div>
         </div>
       `;
-      card.title = `${baseChamp.name} (${cost}골드) - ${baseChamp.skillName || '스킬'}: ${baseChamp.skillDesc || ''}`;
+      card.title = `${baseChamp.name} (${cost}골드) [공유 풀 잔여: ${remCopies}/${maxCopies}장] - ${baseChamp.skillName || '스킬'}: ${baseChamp.skillDesc || ''}`;
 
       // 마우스 누르는 순간 0ms 즉각 구매 (pointerdown) & 클릭 지원
       card.addEventListener("pointerdown", (e) => {
@@ -4027,11 +4157,13 @@ class TFTGame {
     return token;
   }
 
-  // 유닛 툴팁 (스킬 설명 및 장착 아이템 효과 포함)
+  // 유닛 툴팁 (스킬 설명 및 장착 아이템 효과, 공유 풀 잔여량 포함)
   describeUnit(unit) {
     const c = unit.champ;
     const traits = c.traits.map(t => TRAITS[t] ? TRAITS[t].name + (unit.isChosen && unit.chosenTrait === t ? '(x2)' : '') : t).join(", ");
-    let text = `${c.name} ${STAR_TEXT[unit.star] || ''}${unit.isChosen ? ' [선택받은 자]' : ''}\n` +
+    const remCopies = this.getRemainingChampionPool(c.id);
+    const maxCopies = this.getMaxChampionPool(c.id);
+    let text = `${c.name} ${STAR_TEXT[unit.star] || ''}${unit.isChosen ? ' [선택받은 자]' : ''} [풀 잔여: ${remCopies}/${maxCopies}장]\n` +
       `체력 ${unit.maxHp} · 공격력 ${unit.ad} · 공속 ${c.as} · 사거리 ${c.range || 1}\n` +
       (traits ? `특성: ${traits}\n` : '') +
       (c.skillName ? `스킬 - ${c.skillName}: ${c.skillDesc}\n` : '');
@@ -6521,7 +6653,7 @@ function bootGame() {
   if (!window.tftGame) {
     try {
       window.tftGame = new TFTGame();
-      window.tftData = { CHAMPIONS, ROUNDS, TRAITS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS };
+      window.tftData = { CHAMPIONS, ROUNDS, TRAITS, ITEMS, ITEM_RECIPES, BASE_ITEMS, CRAFTABLE_ITEMS, CHAMPION_POOL_SIZES };
     } catch (e) {
       console.error("TFTGame Boot Error:", e);
       window.__bootError = e.stack || e.message;

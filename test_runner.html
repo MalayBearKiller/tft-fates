@@ -563,6 +563,35 @@
           assert(fontSize >= 14, 'Synergy orb name font-size is enlarged (>= 14px): ' + fontSize);
         }
 
+        // TEST 13: Shared Champion Pool (TFT Season 4 rules)
+        assert(tftData.CHAMPION_POOL_SIZES[1] === 29, '1-cost pool size is 29 copies');
+        assert(tftData.CHAMPION_POOL_SIZES[2] === 22, '2-cost pool size is 22 copies');
+        assert(tftData.CHAMPION_POOL_SIZES[3] === 18, '3-cost pool size is 18 copies');
+        assert(tftData.CHAMPION_POOL_SIZES[4] === 12, '4-cost pool size is 12 copies');
+        assert(tftData.CHAMPION_POOL_SIZES[5] === 10, '5-cost pool size is 10 copies');
+
+        const initialDianaRem = game.getRemainingChampionPool('diana');
+        assert(typeof initialDianaRem === 'number' && initialDianaRem <= 29 && initialDianaRem > 0, 'Diana remaining pool valid: ' + initialDianaRem);
+
+        // Exhaust pool test
+        game.bench = [];
+        for (let i = 0; i < 9; i++) {
+          game.bench.push({ champ: { id: 'diana', cost: 1 }, star: 3 });
+        }
+        game.board[4][0] = { champ: { id: 'diana', cost: 1 }, star: 2 };
+        assert(game.getRemainingChampionPool('diana') === 0, 'Diana remaining pool is 0 when exhausted');
+
+        let exhaustedDianaFound = false;
+        for (let r = 0; r < 20; r++) {
+          game.refreshShop(true);
+          if (game.shopSlots.some(s => s && s.baseChamp.id === 'diana')) {
+            exhaustedDianaFound = true;
+            break;
+          }
+        }
+        assert(!exhaustedDianaFound, 'Exhausted champion never rolls in shop');
+        game.resetGame();
+
         testOutput.textContent = 'ALL_TESTS_PASSED (Total assertions: ' + results.length + ')';
         document.title = 'ALL_TESTS_PASSED';
         fetch('/test_result?status=ALL_TESTS_PASSED&assertions=' + results.length);
